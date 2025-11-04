@@ -11,19 +11,17 @@ from sqlalchemy import (
     ForeignKey,
     Text,
 )
-from sqlalchemy.ext.declarative import declarative_base
+from app.core.database import Base
 from pgvector.sqlalchemy import Vector  # type: ignore
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
-Base = declarative_base()
-
 
 class ImageStatus(enum.Enum):
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 class UserImage(Base):
@@ -49,10 +47,6 @@ class UserImage(Base):
         CheckConstraint(
             "face_confidence >= 0 AND face_confidence <= 1",
             name="check_face_confidence",
-        ),
-        CheckConstraint(
-            "processing_status IN ('pending', 'processing', 'completed', 'failed')",
-            name="check_processing_status",
         ),
     )
 

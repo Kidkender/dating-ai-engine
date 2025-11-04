@@ -11,14 +11,12 @@ from sqlalchemy import (
     Integer,
     UniqueConstraint,
 )
-from sqlalchemy.ext.declarative import declarative_base
+from app.core.database import Base
+
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 import enum
-
-
-Base = declarative_base()
 
 
 class ChoiceType(enum.Enum):
@@ -27,14 +25,8 @@ class ChoiceType(enum.Enum):
     PREFER = "prefer"
 
 
-class UserAction(enum.Enum):
-    LIKE = "like"
-    PASS = "pass"
-    PREFER = "prefer"
-
-
 class UserChoice(Base):
-    __table_name__ = "user_choices"
+    __tablename__ = "user_choices"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4())
 
     user_id = Column(
@@ -47,11 +39,11 @@ class UserChoice(Base):
     phase = Column(Integer, nullable=False, default=1)
     position_in_phase = Column(Integer, nullable=False, default=1)
 
-    action = Column(Enum(UserAction), nullable=False)
+    action = Column(Enum(ChoiceType), nullable=False)
 
     response_time_ms = Column(Integer, nullable=True)
     is_revised = Column(Boolean, default=True)
-    original_action = Column(Enum(UserAction), nullable=True)
+    original_action = Column(Enum(ChoiceType), nullable=True)
     revision_count = Column(Integer, default=0)
 
     shown_with_images = Column(ARRAY(UUID), nullable=True)  # type: ignore
@@ -69,8 +61,6 @@ class UserChoice(Base):
         CheckConstraint(
             "position_in_phase >= 1 AND position_in_phase <= 20", name="check_position"
         ),
-        CheckConstraint("action IN ('like', 'pass', 'prefer')", name="check_action"),
-        CheckConstraint("action_score IN (0, 2, 3)", name="check_action_score"),
         CheckConstraint("response_time_ms > 0", name="check_response_time"),
     )
 

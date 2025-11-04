@@ -1,14 +1,11 @@
 import uuid
-from sqlalchemy import CheckConstraint, Column, DateTime, Enum, String
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, DateTime, Enum, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from sqlalchemy.dialects.postgresql import UUID
 import enum
-
-
-Base = declarative_base()
+from app.core.database import Base
 
 
 class Gender(enum.Enum):
@@ -42,10 +39,6 @@ class User(Base):
     )
     user_choices = relationship(
         "UserChoice", back_populates="user", cascade="all, delete-orphan"
-    )
-
-    __table_args__ = CheckConstraint(
-        "status In ('onboarding', 'active', 'completed')", name="check_user_status"
     )
 
     def __repr__(self):

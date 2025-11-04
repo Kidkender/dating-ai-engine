@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = 0.7
 
     PROFILES_PER_PHASE: int = 20
-    PREFERENCE_WEIGHTS = {"prefer": 3, "like": 2, "pass": 0}
 
     # Paths
     IMAGE_DIR: str = "./data/images"

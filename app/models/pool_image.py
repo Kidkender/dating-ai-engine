@@ -1,5 +1,6 @@
 import uuid
-from pgvector import Vector  # type: ignore
+
+from pgvector.sqlalchemy import Vector  # type: ignore
 from sqlalchemy import (
     ARRAY,
     Boolean,
@@ -11,16 +12,13 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.ext.declarative import declarative_base
+from app.core.database import Base
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 
-Base = declarative_base()
-
-
 class PoolImage(Base):
-    __table_name__ = "pool_images"
+    __tablename__ = "pool_images"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4())
     image_URL = Column(Text, nullable=False, unique=True)
