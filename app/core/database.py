@@ -1,14 +1,27 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from contextlib import contextmanager
 from typing import cast
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, DeclarativeBase, Session
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import text
 
 from .config import settings
 
-engine = create_engine(cast(str, settings.DATABASE_URL))
-SessionLocal = sessionmaker(bind=engine)
 
-Base = declarative_base()
+engine = create_engine(
+    cast(str, settings.DATABASE_URL),
+    pool_pre_ping=True,
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 def get_db():
@@ -19,10 +32,22 @@ def get_db():
         db.close()
 
 
-def check_db_connection():
-    """Check if database is reachable"""
+def check_db_connection() -> bool:
     try:
-        engine.connect()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         return True
-    except:
+    except SQLAlchemyError:
         return False
+
+
+@contextmanager
+def transactional(db: Session):
+    try:
+        yield db
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise
+    finally:
+        db.close()

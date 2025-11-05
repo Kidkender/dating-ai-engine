@@ -9,14 +9,14 @@ from app.core.database import Base
 
 
 class Gender(enum.Enum):
-    MALE = "male"
-    FEMALE = "female"
+    MALE = "MALE"
+    FEMALE = "FEMALE"
 
 
 class UserStatus(enum.Enum):
-    ONBOARDING = "onboarding"
-    ACTIVE = "active"
-    COMPLETED = "completed"
+    ONBOARDING = "ONBOARDING"
+    ACTIVE = "ACTIVE"
+    COMPLETED = "COMPLETED"
 
 
 class User(Base):
