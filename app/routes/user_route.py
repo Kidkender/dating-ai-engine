@@ -12,5 +12,4 @@ user_router = APIRouter(prefix="/users", tags=["users"])
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
 def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    user = UserService.create_user(db, user_data)
-    return user
+    return UserService.create_user(db, user_data)

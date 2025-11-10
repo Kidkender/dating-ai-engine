@@ -2,7 +2,7 @@ import secrets
 from sqlalchemy.orm import Session
 from app.core.database import transactional
 from app.core.exception import BadRequestException
-from app.schemas.user import UserCreate, UserStatus
+from app.schemas.user import UserCreate, UserResponse, UserStatus
 from app.models.user import User
 from app.utils.error_constant import ERROR_USER_DUPLICATE_EMAIL
 import logging
@@ -20,7 +20,7 @@ class UserService:
         return secrets.token_urlsafe(32)
 
     @staticmethod
-    def create_user(db: Session, user_data: UserCreate) -> User:
+    def create_user(db: Session, user_data: UserCreate) -> UserResponse:
         """
         Create a new user
 
@@ -52,4 +52,4 @@ class UserService:
             db.add(db_user)
             db.flush()
             db.refresh(db_user)
-            return db_user
+            return UserResponse.model_validate(db_user)
