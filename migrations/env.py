@@ -8,12 +8,6 @@ from dotenv import load_dotenv
 
 from alembic import context
 
-from app.models import (
-    user,
-    user_image,
-    pool_image,
-    user_choice,
-)
 from app.core.database import Base
 
 

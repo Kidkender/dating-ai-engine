@@ -1,15 +1,35 @@
-from http import HTTPStatus
-from fastapi import FastAPI, Request
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from app.core.database import Base, check_db_connection, engine
 
-# from app.routes.user_route import user_router
-import logging
+from app.core.container import container
+from app.core.database import Base, check_db_connection, engine
+from app.core.logging_config import setup_logging, get_logger
+from app.middleware.error_middleware import ErrorHandlingMiddleware
+from app.middleware.logging_middleware import LoggingMiddleware
 from app.routes import api_v1_router
 
 
 Base.metadata.create_all(bind=engine)
+
+setup_logging(level="INFO", json_format=True)
+logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(
+        "Application starting", extra={"version": "1.0.0", "environment": "development"}
+    )
+
+    if not check_db_connection():
+        logger.error("Failed to connect to database on startup")
+    else:
+        logger.info("Database connection established")
+
+    yield
+
+    logger.info("Application shutting down...")
 
 
 app = FastAPI(
@@ -18,7 +38,18 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
+
+container.wire(
+    modules=[
+        "app.routes.sync_route",
+        "app.routes.user_route",
+    ]
+)
+
+app.add_middleware(ErrorHandlingMiddleware)
+app.add_middleware(LoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,15 +57,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
 @app.get("/health")

@@ -4,7 +4,6 @@ from PIL import Image  # type: ignore
 import numpy as np
 import torch
 from facenet_pytorch import InceptionResnetV1, MTCNN  # type: ignore
-from numpy import typing as npt
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +11,7 @@ logger = logging.getLogger(__name__)
 class FaceProcessingService:
     """Service for face detection and embedding extraction"""
 
-    def __init__(self, min_confidence: float = 0.7):
+    def __init__(self, min_confidence: float = 0.9):
         """
         Initialize face processing service
 
@@ -72,7 +71,7 @@ class FaceProcessingService:
 
     def extract_embedding(  # type: ignore
         self, face_tensor: torch.Tensor
-    ) -> Optional[npt.NDArray[np.ndarray]]:  # type: ignore
+    ) -> Optional[np.ndarray]:  # type: ignore
         """
         Extract face embedding using FaceNet
 
@@ -93,13 +92,17 @@ class FaceProcessingService:
             # Extract embedding
             with torch.no_grad():
                 embedding = self.facenet(face_tensor)
+                embedding = embedding / embedding.norm(p=2, dim=1, keepdim=True)
 
             # Convert to numpy and flatten
-            embedding_np = embedding.cpu().numpy().flatten()
+            embedding_np = embedding.cpu().numpy()
 
-            if embedding_np.shape[0] != 512:
-                logger.error(f"Unexpected embedding shape: {embedding_np.shape}")
-                return None
+            if embedding.ndim == 2 and embedding_np.shape[0] == 1:
+                embedding_np = embedding_np.reshape(-1)
+
+            # if embedding_np.shape[0] != 512:
+            #     logger.error(f"Unexpected embedding shape: {embedding_np.shape}")
+            #     return None
 
             logger.debug(f"Extracted embedding with shape: {embedding_np.shape}")
             return embedding_np

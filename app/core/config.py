@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 
-from app.utils.error_constant import ERROR_DATABASE_URL_NOT_FOUND
+from app.constants.error_constant import ERROR_DB_CONNECTION_FAILED
 
 
 class Settings(BaseSettings):
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL")
     def check_database_url(cls, v: str | None) -> str:
         if not v:
-            raise ValueError(ERROR_DATABASE_URL_NOT_FOUND)
+            raise ValueError(ERROR_DB_CONNECTION_FAILED)
         return v
 
 

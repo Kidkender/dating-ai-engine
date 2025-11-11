@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -14,21 +14,25 @@ class DatingAppResponse(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+class UserInfo(BaseModel):
+    """Nested user information"""
+
+    userName: Optional[str] = None
+    userEmail: Optional[str] = None
+    userGender: Optional[str] = None
+
+
 class DatingAppUser(BaseModel):
     """Schema for user data from dating app API"""
 
     # MongoDB ID
     id: Optional[str] = Field(None, alias="_id")
 
-    # User Info
-    userName: Optional[str] = None
-    userSurname: Optional[str] = None
-    fullName: Optional[str] = None
-    userEmail: str
-    userGender: Optional[str] = None  # "male", "female"
-    userBirthdate: Optional[str] = None  # ISO date string
-    userSlug: Optional[str] = None
-    userAddress: Optional[str] = None
+    id: Optional[str] = Field(None, alias="_id")
+    userId: Optional[str] = None
+    orientation: Optional[str] = None
+    datingImages: List[str] = Field(default_factory=list)
+    user: Optional[UserInfo] = None
 
     # Images
     userImages: list[str] = Field(default_factory=list)
@@ -40,50 +44,35 @@ class DatingAppUser(BaseModel):
 
     @property
     def name(self) -> Optional[str]:
-        """Get full name or construct from userName + userSurname"""
-        if self.fullName:
-            return self.fullName
-        if self.userName and self.userSurname:
-            return f"{self.userName} {self.userSurname}"
-        return self.userName or self.userSurname
+        """Get name"""
+        return self.user.userName if self.user else None
 
     @property
-    def email(self) -> str:
+    def email(self) -> Optional[str]:
         """Get email"""
-        return self.userEmail
+        return self.user.userEmail if self.user else None
 
     @property
     def gender(self) -> Optional[str]:
-        """Get gender in uppercase format (MALE/FEMALE)"""
-        if self.userGender:
-            return self.userGender.upper()
+        """Get gender in uppercase format"""
+        if self.user and self.user.userGender:
+            return self.user.userGender.upper()
         return None
 
     @property
-    def images(self) -> list[str]:
+    def images(self) -> List[str]:
         """Get list of image URLs"""
-        return self.userImages
+        return self.datingImages
 
     @property
-    def age(self) -> Optional[int]:
-        """Calculate age from birthdate"""
-        if not self.userBirthdate:
-            return None
-        try:
-            from datetime import datetime
+    def primary_image(self) -> Optional[str]:
+        """Get the first image if available"""
+        return self.datingImages[0] if self.datingImages else None
 
-            birthdate = datetime.fromisoformat(
-                self.userBirthdate.replace("Z", "+00:00")
-            )
-            today = datetime.now()
-            age = (
-                today.year
-                - birthdate.year
-                - ((today.month, today.day) < (birthdate.month, birthdate.day))
-            )
-            return age
-        except Exception:
-            return None
+    @property
+    def orientation_upper(self) -> Optional[str]:
+        """Return orientation in uppercase"""
+        return self.orientation.upper() if self.orientation else None
 
 
 class ImageProcessingResult(BaseModel):

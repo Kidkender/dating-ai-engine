@@ -54,7 +54,7 @@ class DatingAppClient:
 
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(
-                    f"{self.base_url}/api/admin/users",
+                    f"{self.base_url}/api/dating/users",
                     headers=self.headers,  # type: ignore
                     params=params,  # type: ignore
                 )
@@ -123,14 +123,10 @@ class DatingAppClient:
             PIL Image object or None if download fails
         """
         try:
-            # Construct full URL
-            # If image_path already starts with http, use as is
             if image_path.startswith("http"):
                 full_url = image_path
             else:
-                # Remove leading slash if exists
                 clean_path = image_path.lstrip("/")
-                # Construct full URL with base_url
                 full_url = f"{self.image_base_url}/{clean_path}"
 
             logger.debug(f"Downloading image from: {full_url}")

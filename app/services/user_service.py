@@ -1,10 +1,10 @@
 import secrets
 from sqlalchemy.orm import Session
 from app.core.database import transactional
-from app.core.exception import BadRequestException
+from app.core.exception import AppException
 from app.schemas.user import UserCreate, UserResponse, UserStatus
 from app.models.user import User
-from app.utils.error_constant import ERROR_USER_DUPLICATE_EMAIL
+from app.constants.error_constant import ERROR_USER_DUPLICATE_EMAIL
 import logging
 
 
@@ -37,7 +37,7 @@ class UserService:
         with transactional(db):
             existing_user = db.query(User).filter(User.email == user_data.email).first()
             if existing_user:
-                raise BadRequestException(ERROR_USER_DUPLICATE_EMAIL)
+                raise AppException(ERROR_USER_DUPLICATE_EMAIL)
 
             session_token = UserService.generate_session_token()
 
