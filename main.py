@@ -3,12 +3,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.database import Base, check_db_connection, engine
-from app.models import (
-    user,
-    user_image,
-    pool_image,
-    user_choice,
-)
 
 # from app.routes.user_route import user_router
 import logging

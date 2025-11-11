@@ -21,7 +21,7 @@ from sqlalchemy.orm import relationship
 class PoolImage(Base):
     __tablename__ = "pool_images"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     image_URL = Column(Text, nullable=False, unique=True)
 
     person_code = Column(String(50), nullable=True)  # Anonymous identifier

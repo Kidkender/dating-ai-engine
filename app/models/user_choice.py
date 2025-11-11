@@ -1,5 +1,4 @@
 import uuid
-from pgvector import Vector  # type: ignore
 from sqlalchemy import (
     ARRAY,
     Boolean,
@@ -27,7 +26,7 @@ class ChoiceType(enum.Enum):
 
 class UserChoice(Base):
     __tablename__ = "user_choices"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     user_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True

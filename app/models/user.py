@@ -22,7 +22,7 @@ class UserStatus(enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     session_token = Column(String(255), unique=True, nullable=False, index=True)
     name = Column(String(100), nullable=True)

@@ -16,6 +16,12 @@ class Settings(BaseSettings):
 
     PROFILES_PER_PHASE: int = 20
 
+    DATING_APP_TIMEOUT: int = 30
+    DATING_APP_BASE_URL: str | None = None
+    MIN_FACE_CONFIDENCE: float = 0.7
+    DATING_APP_API_KEY: str | None = None
+    DATING_APP_IMAGE_BASE_URL: str | None = None
+
     # Paths
     IMAGE_DIR: str = "./data/images"
     MODEL_DIR: str = "./app/ml/models"
