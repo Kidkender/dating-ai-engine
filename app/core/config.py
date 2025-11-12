@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Paths
     IMAGE_DIR: str = "./data/images"
     MODEL_DIR: str = "./app/ml/models"
+    DATASET_PATH: str = "../dataset/ALL/ALL"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

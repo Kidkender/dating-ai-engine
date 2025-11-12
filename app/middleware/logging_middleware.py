@@ -1,9 +1,10 @@
 import time
-from typing import Awaitable, Callable
 import uuid
+from typing import Awaitable, Callable
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+
 from app.core.logging_config import get_logger, request_id_var, user_id_var
 
 logger = get_logger(__name__)

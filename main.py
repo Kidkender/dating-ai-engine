@@ -1,14 +1,14 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.container import container
 from app.core.database import Base, check_db_connection, engine
-from app.core.logging_config import setup_logging, get_logger
+from app.core.logging_config import get_logger, setup_logging
 from app.middleware.error_middleware import ErrorHandlingMiddleware
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.routes import api_v1_router
-
 
 Base.metadata.create_all(bind=engine)
 
