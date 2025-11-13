@@ -36,7 +36,6 @@ class ImportSummary(BaseModel):
     round3: dict = Field(default_factory=dict)
     errors: list[dict] = Field(default_factory=list)
 
-
 class PhaseImagesResponse(BaseModel):
     """Response for getting phase images"""
 

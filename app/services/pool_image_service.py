@@ -95,7 +95,7 @@ class PoolImageService:
                 db.query(PoolImage)
                 .filter(
                     PoolImage.is_active == True,
-                    PoolImage.phase_eligibility.contains([phase]),
+                    PoolImage.phase_eligibility.any(phase) 
                 )
                 .all()
             )

@@ -9,13 +9,21 @@ ERROR_USER_DUPLICATE_EMAIL = "error.user.duplicate-email"
 ERROR_USER_ALREADY_EXIST = "error.user.already-exist"
 ERROR_USER_INVALID_EMAIL = "error.user.invalid-email"
 ERROR_USER_INVALID_STATUS = "error.user.invalid-status"
+ERROR_USER_NOT_ACTIVE = "error.user.not-active"
 
 # Image
 ERROR_IMAGE_NOT_FOUND = "error.image.not-found"
+ERROR_IMAGE_NOT_ACTIVE = "error.image.not-active"
 ERROR_IMAGE_DOWNLOAD_FAILED = "error.image.download-failed"
 ERROR_IMAGE_PROCESSING_FAILED = "error.image.processing-failed"
 ERROR_IMAGE_NO_FACE_DETECTED = "error.image.no-face-detected"
 ERROR_IMAGE_POOR_QUALITY = "error.image.poor-quality"
+
+# Choice
+ERROR_CHOICE_ALREADY_EXISTS = "error.choice.already-exists"
+ERROR_CHOICE_INVALID_PHASE = "error.choice.invalid-phase"
+ERROR_CHOICE_ALL_COMPLETED = "error.choice.all-completed"
+ERROR_CHOICE_INVALID_ACTION = "error.choice.invalid-action"
 
 # Sync
 ERROR_SYNC_CONNECTION_FAILED = "error.sync.connection-failed"

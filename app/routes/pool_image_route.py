@@ -1,10 +1,12 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.config import settings
+from ..models.user import User
 from app.schemas.pool_image import ImportSummary, PhaseImagesResponse, PoolImageResponse
+from ..services.phase_selection_service import PhaseSelectionService
 from ..services.import_service import ImportService
 from app.services.pool_image_service import PoolImageService
 from app.services.face_processing_service import FaceProcessingService
@@ -13,6 +15,39 @@ logger = logging.getLogger(__name__)
 
 pool_image_router = APIRouter(prefix="/pool-images", tags=["pool-images"])
 
+def get_current_user(
+    authorization: str = Header(...), db: Session = Depends(get_db)
+) -> User:
+    """
+    Get current user from session token
+
+    Args:
+        authorization: Bearer token from header
+        db: Database session
+
+    Returns:
+        User object
+
+    Raises:
+        HTTPException: If token invalid or user not found
+    """
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format",
+        )
+
+    session_token = authorization.replace("Bearer ", "")
+
+    user = db.query(User).filter(User.session_token == session_token).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session token",
+        )
+
+    return user
 
 @pool_image_router.post(
     "/import",
@@ -112,4 +147,73 @@ def get_phase_images(phase: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch images: {str(e)}",
+        )
+
+
+
+
+@pool_image_router.get(
+    "/recommendations",
+    response_model=PhaseImagesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get personalized image recommendations for current phase",
+)
+def get_recommendations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get personalized image recommendations based on user's phase and preferences
+
+    **Phase 1:** Random diverse selection (exploration)
+    **Phase 2:** Similar to Phase 1 LIKED/PREFERRED images (refinement)
+    **Phase 3:** Similar to Phase 2 preferences with Phase 1 context (fine-tuning)
+
+    The system automatically determines the user's current phase and returns
+    20 personalized images.
+    """
+    try:
+        # Determine current phase from user progress
+        from app.services.user_choice_service import UserChoiceService
+
+        progress = UserChoiceService.get_user_progress(db, current_user.id)
+        current_phase = progress["current_phase"]
+
+        if progress["all_completed"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User has completed all phases",
+            )
+
+        # Get personalized recommendations
+        images = PhaseSelectionService.get_images_for_user(
+            db=db,
+            user_id=current_user.id,
+            phase=current_phase,
+            limit=20,
+        )
+
+        if not images:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No available images for phase {current_phase}",
+            )
+
+        logger.info(
+            f"Returning {len(images)} recommendations for user {current_user.id} phase {current_phase}"
+        )
+
+        return PhaseImagesResponse(
+            phase=current_phase,
+            total_images=len(images),
+            images=[PoolImageResponse.model_validate(img) for img in images],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error getting recommendations", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get recommendations: {str(e)}",
         )
