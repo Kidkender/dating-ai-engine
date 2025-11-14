@@ -3,10 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..core.auth_dependency import get_current_user
+from ..core.auth_dependency import AuthResult, get_current_user
 from app.core.database import get_db
 from app.core.exception import AppException
-from app.models.user import User
 from app.schemas.user_choice import (
     BatchChoiceSubmitRequest,
     BatchChoiceSubmitResponse,
@@ -31,7 +30,7 @@ choice_router = APIRouter(prefix="/choices", tags=["choices"])
 def submit_choice(
     request: ChoiceSubmitRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: AuthResult = Depends(get_current_user),
 ):
     """
     Submit a choice (LIKE/PASS/PREFER) for a pool image
@@ -49,7 +48,7 @@ def submit_choice(
     try:
         result = UserChoiceService.create_choice(
             db=db,
-            user_id=current_user.id,
+            user_id=auth.user.id,
             pool_image_id=request.pool_image_id,
             action=request.action,
             response_time_ms=request.response_time_ms,
@@ -82,7 +81,7 @@ def submit_choice(
 def submit_batch_choices(
     request: BatchChoiceSubmitRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: AuthResult = Depends(get_current_user),
 ):
     """
     Submit exactly 20 choices (LIKE/PASS/PREFER) for a phase
@@ -140,7 +139,7 @@ def submit_batch_choices(
 
         result = UserChoiceService.create_batch_choices(
             db=db,
-            user_id=current_user.id,
+            user_id=auth.user.id,
             choices_data=choices_data,
         )
 
@@ -183,7 +182,7 @@ def submit_batch_choices(
 )
 def get_progress(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: AuthResult = Depends(get_current_user),
 ):
     """
     Get user's progress across all phases
@@ -195,7 +194,7 @@ def get_progress(
     - Completion status for each phase
     """
     try:
-        progress = UserChoiceService.get_user_progress(db=db, user_id=current_user.id)
+        progress = UserChoiceService.get_user_progress(db=db, user_id=auth.user.id)
 
         return UserProgressResponse(**progress)
 
@@ -218,7 +217,7 @@ def get_progress(
 def get_my_choices(
     phase: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: AuthResult = Depends(get_current_user),
 ):
     """
     Get user's choices with optional phase filter
@@ -234,7 +233,7 @@ def get_my_choices(
     """
     try:
         result = UserChoiceService.get_user_choices(
-            db=db, user_id=current_user.id, phase=phase
+            db=db, user_id=auth.user.id, phase=phase
         )
 
         return UserChoicesListResponse(**result)

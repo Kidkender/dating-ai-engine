@@ -1,3 +1,7 @@
+"""
+Updated main.py with HTTP client lifecycle management
+"""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,6 +13,7 @@ from app.core.logging_config import get_logger, setup_logging
 from app.middleware.error_middleware import ErrorHandlingMiddleware
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.routes import api_v1_router
+from app.utils.http_client import close_http_client
 
 from fastapi.staticfiles import StaticFiles
 
@@ -20,8 +25,14 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager
+    Handles startup and shutdown events
+    """
+    # Startup
     logger.info(
-        "Application starting", extra={"version": "1.0.0", "environment": "development"}
+        "Application starting",
+        extra={"version": "1.0.0", "environment": "development"}
     )
 
     if not check_db_connection():
@@ -29,9 +40,16 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Database connection established")
 
+    logger.info("HTTP client initialized with connection pooling")
+
     yield
 
+    # Shutdown
     logger.info("Application shutting down...")
+    
+    # Close HTTP client and release connections
+    await close_http_client()
+    logger.info("HTTP client closed")
 
 
 app = FastAPI(

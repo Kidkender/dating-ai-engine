@@ -1,10 +1,10 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ..core.auth_dependency import AuthResult, get_current_user_optional
 from app.core.database import get_db
 from app.core.config import settings
-from ..models.user import User
 from app.schemas.pool_image import ImportSummary, PhaseImagesResponse, PoolImageResponse
 from ..services.phase_selection_service import PhaseSelectionService
 from ..services.import_service import ImportService
@@ -14,40 +14,6 @@ from app.services.face_processing_service import FaceProcessingService
 logger = logging.getLogger(__name__)
 
 pool_image_router = APIRouter(prefix="/pool-images", tags=["pool-images"])
-
-def get_current_user(
-    authorization: str = Header(...), db: Session = Depends(get_db)
-) -> User:
-    """
-    Get current user from session token
-
-    Args:
-        authorization: Bearer token from header
-        db: Database session
-
-    Returns:
-        User object
-
-    Raises:
-        HTTPException: If token invalid or user not found
-    """
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
-        )
-
-    session_token = authorization.replace("Bearer ", "")
-
-    user = db.query(User).filter(User.session_token == session_token).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid session token",
-        )
-
-    return user
 
 @pool_image_router.post(
     "/import",
@@ -160,7 +126,7 @@ def get_phase_images(phase: int, db: Session = Depends(get_db)):
 )
 def get_recommendations(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: AuthResult = Depends(get_current_user_optional),
 ):
     """
     Get personalized image recommendations based on user's phase and preferences
@@ -176,7 +142,7 @@ def get_recommendations(
         # Determine current phase from user progress
         from app.services.user_choice_service import UserChoiceService
 
-        progress = UserChoiceService.get_user_progress(db, current_user.id)
+        progress = UserChoiceService.get_user_progress(db, auth.user.id)
         current_phase = progress["current_phase"]
 
         if progress["all_completed"]:
@@ -188,7 +154,7 @@ def get_recommendations(
         # Get personalized recommendations
         images = PhaseSelectionService.get_images_for_user(
             db=db,
-            user_id=current_user.id,
+            user_id=auth.user.id,
             phase=current_phase,
             limit=20,
         )
@@ -200,7 +166,7 @@ def get_recommendations(
             )
 
         logger.info(
-            f"Returning {len(images)} recommendations for user {current_user.id} phase {current_phase}"
+            f"Returning {len(images)} recommendations for user {auth.user.id} phase {current_phase}"
         )
 
         return PhaseImagesResponse(

@@ -11,10 +11,15 @@ from .database import get_db
 
 logger = logging.getLogger(__name__)
 
+class AuthResult:
+    def __init__(self, user: User, token: str):
+        self.user = user
+        self.token = token
+
 async def get_current_user(
     authorization: str = Header(...),
     db: Session = Depends(get_db)
-) -> User: 
+)-> AuthResult: 
     """
     Validate access token and return current user
 
@@ -65,7 +70,7 @@ async def get_current_user(
     
     try: 
         user = AuthService.get_or_create_user(db=db, user_id=user_id, email=email)
-        return user
+        return AuthResult(user, access_token)
 
     except Exception as e:
         logger.error(f"Error getting user: {e}", exc_info=True)
@@ -77,7 +82,7 @@ async def get_current_user(
 async def get_current_user_optional(
     authorization: str = Header(None),
     db: Session = Depends(get_db),
-) -> User | None:
+) -> AuthResult | None:
     """
     Optional authentication - returns user if valid token, None otherwise
 

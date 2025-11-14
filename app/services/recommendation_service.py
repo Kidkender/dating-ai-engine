@@ -1,7 +1,3 @@
-"""
-Recommendation Service - Generate personalized recommendations
-after user completes all 3 phases
-"""
 
 import logging
 from typing import List, Tuple
@@ -14,7 +10,8 @@ from app.models.user_choice import UserChoice, ChoiceType
 from app.models.user_image import UserImage
 from app.models.recommendation import Recommendation
 from app.core.exception import AppException
-
+from app.core.config import settings
+from app.utils.http_client import http_client
 logger = logging.getLogger(__name__)
 
 
@@ -176,7 +173,6 @@ class RecommendationService:
         """
         try:
             profile = RecommendationService.build_user_preference_profile(db, user_id)
-            # print(f"profile: {profile}")            
             preference_vector = np.array(profile["preference_vector"])
 
             # Get current user's gender to filter opposite/compatible gender
@@ -198,7 +194,6 @@ class RecommendationService:
                 .all()
             )
 
-            print(f"len candidate: {len(candidate_users)}")
             if not candidate_users:
                 logger.warning(f"No candidate users found for {user_id}")
                 return []
@@ -233,7 +228,6 @@ class RecommendationService:
                 candidate_vector = candidate_vector / (np.linalg.norm(candidate_vector) + 1e-8)
                 
                 similarity = float(np.dot(preference_vector, candidate_vector))
-                print(f"similarity: {similarity}")
                 if similarity >= min_similarity:
                     recommendations.append((candidate, similarity))
 
@@ -310,9 +304,10 @@ class RecommendationService:
             raise
 
     @staticmethod
-    def get_user_recommendations(
+    async def get_user_recommendations(
         db: Session,
         user_id: UUID,
+        token: str,
         limit: int = 20
     ) -> List[dict]:
         """
@@ -335,27 +330,32 @@ class RecommendationService:
                 .all()
             )
 
-            results = []
+            recommend_external_id = []
             for rec in recommendations:
-                primary_image = (
-                    db.query(UserImage)
-                    .filter(
-                        UserImage.user_id == rec.recommended_user_id,
-                        UserImage.is_primary == True,
-                    )
-                    .first()
-                )
+                external_id = rec.recommended_user.external_user_id
+                if external_id:  
+                    recommend_external_id.append(external_id)
+                
+            recommend_external_id_str =[str(uid) for uid in recommend_external_id]
+            
+            body= {
+                "userIds": recommend_external_id_str
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            
+            response = await http_client.post(
+                f"{settings.DATING_APP_BASE_URL}/api/dating/profiles",
+                headers=headers,
+                json=body
+            )
+            
 
-                results.append({
-                    "rank": rec.rank,
-                    "user_id": str(rec.recommended_user_id),
-                    "name": rec.recommended_user.name,
-                    "similarity_score": rec.similarity_score,
-                    "image_url": primary_image.image_URL if primary_image else None,
-                    "created_at": rec.created_at.isoformat() if rec.created_at else None,
-                })
 
-            return results
+            return response.json()
 
         except Exception as e:
             logger.error(f"Error getting recommendations: {e}", exc_info=True)

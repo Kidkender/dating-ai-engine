@@ -3,6 +3,8 @@ from typing import Optional, Tuple
 import httpx
 from sqlalchemy.orm import Session
 
+from app.utils.http_client import http_client
+
 from ..core.exception import AppException
 
 from ..models.user import User, UserStatus
@@ -30,35 +32,37 @@ class AuthService:
                 "Content-Type": "application/json"
             }
             
-            async with httpx.AsyncClient(timeout=settings.DATING_APP_TIMEOUT) as client:
-                response = await client.get(
-                    f"{settings.DATING_APP_BASE_URL}/api/users/getCurrentUser",
-                    headers=headers
-                )
-                
-                if response.status_code != 200:
-                    logger.warning(
-                        f"Token validation failed with status {response.status_code}",
-                    )
-                    return False, None, None, f"Invalid token: HTTP {response.status_code}"
-        
-                data = response.json()
-                user_id = data.get("data", {}).get("userId")
-                email = data.get("userEmail", {}).get("userEmail")
-                if not user_id:
-                    logger.error(
-                        "Invalid response format from healthCheck",
-                        extra={"response": data}
-                    )
-                    return False, None, None,'Invalid response format'
-
-                logger.info(
-                f"Token validated successfully for user {user_id}",
-                    extra={"user_id": user_id},
-                )
-
-                return True, user_id,email, None
+            response = await http_client.get(
+                f"{settings.DATING_APP_BASE_URL}/api/users/getCurrentUser",
+                headers = headers
+            )
             
+            if response.status_code != 200:
+                logger.warning(
+                    f"Token validation failed with status {response.status_code}",
+                    extra={"status_code": response.status_code}
+                )
+                return False, None, None, f"Invalid token: HTTP {response.status_code}"
+
+            data = response.json()
+            user_id = data.get("data", {}).get("id")
+            email = data.get("data", {}).get("userEmail")
+            
+            
+            if not user_id:
+                logger.error(
+                    "Invalid response format from getCurrentUser",
+                    extra={"response": data}
+                )
+                return False, None, None, 'Invalid response format'
+
+            logger.info(
+                f"Token validated successfully for user {user_id}",
+                extra={"user_id": user_id},
+            )
+
+            return True, user_id, email, None
+         
         except httpx.TimeoutException:
             logger.error("Token validation timeout")
             return False, None, None,"Token validation timeout"
@@ -84,23 +88,37 @@ class AuthService:
             if email:
                 user = db.query(User).filter(User.email == email).first()
                 
+            if email:
+                user = db.query(User).filter(User.email == email).first()
+                
                 if user:
                     user.external_user_id = user_id
                     db.commit()
+                    db.refresh(user)
+                    logger.info(
+                        f"Linked external_user_id {user_id} to existing user",
+                        extra={"user_id": str(user.id), "external_user_id": user_id}
+                    )
                     return user
+            
+            # Create new user
+            new_user = User(
+                external_user_id=user_id,
+                email=email or f"{user_id}@temp.com",
+                session_token="",
+                status=UserStatus.ONBOARDING
+            )
                 
-                new_user = User(
-                    external_user_id = user_id,
-                    email = email or f"{user_id}@temp.com",
-                    session_token =  "",
-                    status = UserStatus.ONBOARDING
-                )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+
+            logger.info(
+                f"Created new user for external_user_id {user_id}",
+                extra={"user_id": str(new_user.id), "external_user_id": user_id}
+            )
                 
-                db.add(new_user)
-                db.commit()
-                db.refresh(new_user)
-                
-                return new_user
+            return new_user
             
         except Exception as e:
                 db.rollback()

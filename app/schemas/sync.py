@@ -28,7 +28,7 @@ class DatingAppUser(BaseModel):
     # MongoDB ID
     id: Optional[str] = Field(None, alias="_id")
 
-    id: Optional[str] = Field(None, alias="_id")
+    # id: Optional[str] = Field(None, alias="_id")
     userId: Optional[str] = None
     orientation: Optional[str] = None
     datingImages: List[str] = Field(default_factory=list)

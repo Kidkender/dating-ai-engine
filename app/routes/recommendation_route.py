@@ -2,13 +2,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..core.auth_dependency import get_current_user
+from ..core.auth_dependency import AuthResult, get_current_user
 from app.core.database import get_db
 from app.core.exception import AppException
 from app.models.user import User
 from app.schemas.recommendation import (
     PreferenceProfileResponse,
-    RecommendationsResponse,
     GenerateRecommendationsResponse,
 )
 from app.services.recommendation_service import RecommendationService
@@ -67,7 +66,7 @@ def get_preference_profile(
 def generate_recommendations(
     # request: GenerateRecommendationsRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: AuthResult = Depends(get_current_user),
 ):
     """
     Generate personalized user recommendations based on preference profile
@@ -95,7 +94,7 @@ def generate_recommendations(
         # Generate recommendations
         recommendations = RecommendationService.generate_recommendations(
             db=db,
-            user_id=current_user.id,
+            user_id=auth.user.id,
             # limit=request.limit,
             # min_similarity=request.min_similarity,
             limit=10,
@@ -109,20 +108,20 @@ def generate_recommendations(
                 saved_count=0,
                 top_similarity_score=0.0,
                 preference_profile=RecommendationService.build_user_preference_profile(
-                    db, current_user.id
+                    db, auth.user.id
                 ),
             )
 
         # Save to database
         saved = RecommendationService.save_recommendations(
             db=db,
-            user_id=current_user.id,
+            user_id=auth.user.id,
             recommendations=recommendations,
         )
 
         # Get profile
         profile = RecommendationService.build_user_preference_profile(
-            db, current_user.id
+            db, auth.user.id
         )
 
         top_score = recommendations[0][1] if recommendations else 0.0
@@ -147,14 +146,14 @@ def generate_recommendations(
 
 @recommendation_router.get(
     "/me",
-    response_model=RecommendationsResponse,
+    # response_model=Any,
     status_code=status.HTTP_200_OK,
     summary="Get my saved recommendations",
 )
-def get_my_recommendations(
+async def get_my_recommendations(
     limit: int = 20,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: AuthResult = Depends(get_current_user),
 ):
     """
     Get saved recommendations for current user
@@ -168,24 +167,27 @@ def get_my_recommendations(
     - Includes user info and primary image
     """
     try:
-        recommendations = RecommendationService.get_user_recommendations(
+
+        recommendations = await RecommendationService.get_user_recommendations(
             db=db,
-            user_id=current_user.id,
+            user_id=auth.user.id,
+            token=auth.token,
             limit=limit,
         )
+        return recommendations
 
-        if not recommendations:
-            return RecommendationsResponse(
-                message="No recommendations found. Generate recommendations first.",
-                total_recommendations=0,
-                recommendations=[],
-            )
+        # if not recommendations:
+        #     return RecommendationsResponse(
+        #         message="No recommendations found. Generate recommendations first.",
+        #         total_recommendations=0,
+        #         recommendations=[],
+        #     )
 
-        return RecommendationsResponse(
-            message=f"Found {len(recommendations)} recommendations",
-            total_recommendations=len(recommendations),
-            recommendations=recommendations,
-        )
+        # return RecommendationsResponse(
+        #     message=f"Found {len(recommendations)} recommendations",
+        #     total_recommendations=len(recommendations),
+        #     recommendations=recommendations,
+        # )
 
     except Exception as e:
         logger.error("Error getting recommendations", exc_info=True)

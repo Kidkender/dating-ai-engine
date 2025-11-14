@@ -32,7 +32,7 @@ class PhaseSelectionService:
         elif phase == 2:
             return PhaseSelectionService._select_phase_2_images(db, user_id, limit)
         else:
-            return PhaseSelectionService._select_phase_2_images(db, user_id, limit)
+            return PhaseSelectionService._select_phase_3_images(db, user_id, limit)
         
     @staticmethod
     def _select_phase_1_images(
@@ -169,7 +169,8 @@ class PhaseSelectionService:
         
         preferred_embeddings = []
         for choice in all_preferences:
-            if choice.pool_image and choice.pool_image.face_embedding:
+            # if choice.pool_image and choice.pool_image.face_embedding:
+            if choice.pool_image is not None and len(choice.pool_image.face_embedding) > 0:
                 embedding = np.array(choice.pool_image.face_embedding)
 
                 weight = 1.0 if choice.phase == 2 else 0.5
@@ -205,7 +206,7 @@ class PhaseSelectionService:
         similarities= []
         
         for image in available_images:
-            if image.face_embedding:
+            if image.face_embedding is not None:
                 image_embedding = np.array(image.face_embedding)
                 similarity = PhaseSelectionService._cosine_similarity(
                     preferred_vector, image_embedding

@@ -1,4 +1,5 @@
 import logging
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -78,25 +79,86 @@ class UserSyncService:
     ) -> User | None:
         """Get existing user or create new one"""
         existing_user = (
-            self.db.query(User).filter(User.email == dating_user.email).first()
+            self.db.query(User)
+            .filter(
+                or_(
+                    User.email == dating_user.email,
+                    User.external_user_id == dating_user.userId
+                )
+            )
+            .first()
         )
 
-        if existing_user and not force_resync:
-            logger.info(
-                f"User {dating_user.email} already exists, skipping",
-                extra={"user_email": dating_user.email},
-            )
-            result.error_message = "User already exists"
-            return None
-
         if existing_user:
-            logger.info(
-                f"Force resyncing user {dating_user.email}",
-                extra={"user_email": dating_user.email},
-            )
+            needs_update = False
+            
+            if not existing_user.external_user_id and dating_user.userId:
+                logger.info(
+                    f"Updating external_user_id for user {existing_user.email}",
+                    extra={
+                        "user_id": str(existing_user.id),
+                        "external_user_id": dating_user.userId
+                    }
+                )
+                existing_user.external_user_id = dating_user.userId
+                needs_update = True
+            
+            if not existing_user.email and dating_user.email:
+                logger.info(
+                    f"Updating email for user with external_user_id {existing_user.external_user_id}",
+                    extra={
+                        "user_id": str(existing_user.id),
+                        "email": dating_user.email
+                    }
+                )
+                existing_user.email = dating_user.email
+                needs_update = True
+            
+            if dating_user.name and existing_user.name != dating_user.name:
+                logger.debug(f"Updating name for user {existing_user.id}")
+                existing_user.name = dating_user.name
+                needs_update = True
+            
+            if dating_user.gender:
+                mapped_gender = self._map_gender(dating_user.gender)
+                if mapped_gender and existing_user.gender != mapped_gender:
+                    logger.debug(f"Updating gender for user {existing_user.id}")
+                    existing_user.gender = mapped_gender
+                    needs_update = True
+            
+            if needs_update:
+                self.db.flush()
+                self.db.refresh(existing_user)
+                logger.info(
+                    f"Updated user information for {existing_user.email}",
+                    extra={
+                        "user_id": str(existing_user.id),
+                        "external_user_id": existing_user.external_user_id,
+                        "email": existing_user.email
+                    }
+                )
+            
+            if not force_resync and not needs_update:
+                logger.info(
+                    f"User {dating_user.email} already exists with complete info, skipping",
+                    extra={
+                        "user_email": dating_user.email,
+                        "user_id": str(existing_user.id)
+                    }
+                )
+                result.error_message = "User already exists with complete information"
+                return None
+            
+            if force_resync:
+                logger.info(
+                    f"Force resyncing user {dating_user.email}",
+                    extra={"user_email": dating_user.email}
+                )
+            
             return existing_user
 
         return self._create_user(dating_user)
+
 
     def _create_user(self, dating_user: DatingAppUser) -> User:
         """Create a new user in database"""
@@ -112,6 +174,7 @@ class UserSyncService:
                 gender=gender,
                 session_token=session_token,
                 status=UserStatus.ONBOARDING,
+                external_user_id = dating_user.userId
             )
 
             self.db.add(db_user)

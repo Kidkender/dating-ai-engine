@@ -1,8 +1,8 @@
 from io import BytesIO
-import httpx
 import logging
 from typing import Optional
 from PIL import Image
+from app.utils.http_client import http_client
 
 from ..schemas.sync import DatingAppUser
 
@@ -30,7 +30,7 @@ class DatingAppClient:
         """
         self.base_url = base_url.rstrip("/")
         self.image_base_url = image_base_url
-        self.api_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2NzI5YzI5NzgxMmU4NmQ3M2I1NTM0MjEiLCJ1c2VyRW1haWwiOiJ2dW9uZ0B5b3BtYWlsLmNvbSIsInVzZXJOYW1lIjoiVnVvbmciLCJpc0FkbWluIjp0cnVlLCJ1c2VyT25ib2FyZGluZyI6ImRvbmUiLCJwcm9maWxlVHlwZSI6ImJ1c2luZXNzIiwiYnVzaW5lc3NQcm9maWxlIjoiIiwiY29tbW9uT25ib2FyZGluZyI6dHJ1ZSwiYnVzaW5lc3NPbmJvYXJkaW5nIjp0cnVlLCJsb2dpblNlc3Npb25Qcm9maWxlVHlwZSI6ImluZGl2aWR1YWwiLCJpYXQiOjE3NjI3NDQ2MzB9.3T_jxjlZywgxPFi0VyMIDgpiPT3SAYkRKhYK6ZheLa4"
+        self.api_key = api_key
         self.timeout = timeout
 
         self.headers = {}
@@ -51,65 +51,65 @@ class DatingAppClient:
             params = {}
             if limit is not None:
                 params["limit"] = limit
+            
+            response = await http_client.get(
+                f"{self.base_url}/api/dating/users",
+                headers=self.headers,
+                params=params,
+            )
 
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    f"{self.base_url}/api/dating/users",
-                    headers=self.headers,  # type: ignore
-                    params=params,  # type: ignore
+            response.raise_for_status()
+            response_json = response.json()
+
+            if isinstance(response_json, dict) and "data" in response_json:
+                user_data_list = response_json["data"]
+                logger.info(
+                    f"Parsed response with status: {response_json.get('status')}"
                 )
-                response.raise_for_status()
-                response_json = response.json()
+            else:
+                user_data_list = response_json
 
-                if isinstance(response_json, dict) and "data" in response_json:
-                    user_data_list = response_json["data"]
-                    logger.info(
-                        f"Parsed response with status: {response_json.get('status')}"
+            users = []
+            for user_data in user_data_list:
+                try:
+                    user = DatingAppUser.model_validate(user_data)
+                    users.append(user)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to parse user {user_data.get('userEmail', 'unknown')}: {e}"
                     )
-                else:
-                    # Fallback: assume response is directly the user array
-                    user_data_list = response_json
+                    continue
 
-                users = []
-                for user_data in user_data_list:
-                    try:
-                        # Pydantic will automatically pick only defined fields
-                        user = DatingAppUser.model_validate(user_data)
-                        users.append(user)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to parse user {user_data.get('userEmail', 'unknown')}: {e}"
-                        )
-                        continue
+            logger.info(f"Successfully fetched {len(users)} users from dating app")
+            return users
 
-                logger.info(f"Successfully fetched {len(users)} users from dating app")
-                return users  # type: ignore
-
-        except httpx.HTTPError as e:
-            logger.error(f"Http error fetching users: {e}")
-            raise
         except Exception as e:
-            logger.error(f"Error fetching users: {e}")
+            logger.error(f"Error fetching users: {e}", exc_info=True)
             raise
-
     async def fetch_user_by_id(self, user_id: str) -> Optional[DatingAppUser]:
+        """
+        Fetch single user by ID
+
+        Args:
+            user_id: User ID to fetch
+
+        Returns:
+            DatingAppUser or None if not found
+        """
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    f"{self.base_url}/api/admin/users/{user_id}", headers=self.headers  # type: ignore
-                )
+            response = await http_client.get(
+                f"{self.base_url}/api/admin/users/{user_id}",
+                headers=self.headers,
+            )
 
-                if response.status_code == 404:
-                    return None
+            if response.status_code == 404:
+                return None
 
-                response.raise_for_status()
-                return DatingAppUser(**response.json())
+            response.raise_for_status()
+            return DatingAppUser(**response.json())
 
-        except httpx.HTTPError as e:
-            logger.error(f"HTTP error fetching user {user_id}: {e}")
-            raise
         except Exception as e:
-            logger.error(f"Error fetching user {user_id}: {e}")
+            logger.error(f"Error fetching user {user_id}: {e}", exc_info=True)
             raise
 
     async def download_image(self, image_path: str) -> Optional[Image.Image]:
@@ -117,7 +117,7 @@ class DatingAppClient:
         Download image from dating app
 
         Args:
-            image_path: Image path from dating app (e.g., "images/1746613443481_1000003282.png")
+            image_path: Image path from dating app
 
         Returns:
             PIL Image object or None if download fails
@@ -136,20 +136,20 @@ class DatingAppClient:
                 "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
             }
 
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(full_url, headers=download_headers)  # type: ignore
-                response.raise_for_status()
+            response = await http_client.get(
+                full_url,
+                headers=download_headers,
+            )
+            
+            response.raise_for_status()
 
-                # Load image from bytes
-                image = Image.open(BytesIO(response.content))
-                image = image.convert("RGB")
+            # Load image from bytes
+            image = Image.open(BytesIO(response.content))
+            image = image.convert("RGB")
 
-                logger.debug(f"Successfully downloaded image: {image_path}")
-                return image
+            logger.debug(f"Successfully downloaded image: {image_path}")
+            return image
 
-        except httpx.HTTPError as e:
-            logger.warning(f"HTTP error downloading image {image_path}: {e}")
-            return None
         except Exception as e:
             logger.warning(f"Error downloading image {image_path}: {e}")
             return None
@@ -162,11 +162,13 @@ class DatingAppClient:
             True if connection successful, False otherwise
         """
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                response = await client.get(
-                    f"{self.base_url}/api/auth/healthCheck", headers=self.headers  # type: ignore
-                )
-                return response.status_code == 200
+            response = await http_client.get(
+                f"{self.base_url}/api/auth/healthCheck",
+                headers=self.headers,
+            )
+            
+            return response.status_code == 200
+            
         except Exception as e:
             logger.error(f"Connection verification failed: {e}")
             return False
