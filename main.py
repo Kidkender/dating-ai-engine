@@ -10,6 +10,8 @@ from app.middleware.error_middleware import ErrorHandlingMiddleware
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.routes import api_v1_router
 
+from fastapi.staticfiles import StaticFiles
+
 Base.metadata.create_all(bind=engine)
 
 setup_logging(level="INFO", json_format=True)
@@ -71,6 +73,7 @@ async def health_check():
 
 
 app.include_router(api_v1_router)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
     import uvicorn

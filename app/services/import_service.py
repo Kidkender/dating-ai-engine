@@ -84,13 +84,12 @@ class ImportService:
             try:
                 image_path = os.path.join(folder_path, image_file)
 
-                # Check if already imported
                 if PoolImageService.get_pool_image_by_url(self.db, image_file):
+
                     logger.debug(f"Image {image_file} already exists, skipping")
                     summary["skipped"] += 1
                     continue
 
-                # Import the image
                 success = self._import_single_image(image_path, image_file, phase)
 
                 if success:
@@ -160,11 +159,12 @@ class ImportService:
                     extra={"image_file": image_file, "confidence": confidence},
                 )
                 return False
+            image_url = f"/round{phase}/{image_file}"
 
             # Create pool image
             PoolImageService.create_pool_image(
                 db=self.db,
-                image_url=image_file,
+                image_url=image_url,
                 person_code=person_code,
                 face_embedding=embedding,
                 face_confidence=confidence,

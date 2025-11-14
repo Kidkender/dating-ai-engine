@@ -171,6 +171,226 @@ class UserChoiceService:
             raise
 
     @staticmethod
+    def create_batch_choices(
+        db: Session,
+        user_id: UUID,
+        choices_data: list[dict],
+    ) -> dict:
+        """
+        Create multiple choices at once (batch operation)
+
+        Args:
+            db: Database session
+            user_id: User UUID
+            choices_data: List of choice dictionaries containing:
+                - pool_image_id: UUID
+                - action: str (LIKE, PASS, PREFER)
+                - response_time_ms: Optional[int]
+
+        Returns:
+            Dictionary with batch results and progress
+
+        Raises:
+            AppException: If validation fails
+        """
+        try:
+            if len(choices_data) != 20:
+                raise AppException(
+                    error_code="error.choice.invalid-count",
+                    message=f"Must submit exactly 20 choices for a phase, received {len(choices_data)}",
+                    status_code=400,
+                )
+              
+            user = db.query(User).filter(User.id == user_id).first()
+            if not user:
+                raise AppException(
+                    error_code="error.user.not-found",
+                    message="User not found",
+                    status_code=404,
+                )
+
+            if user.status != UserStatus.ACTIVE:
+                raise AppException(
+                    error_code="error.user.not-active",
+                    message="User is not active",
+                    status_code=400,
+                )
+
+            # Get current phase
+            current_phase, start_position = UserChoiceService._get_current_phase_and_position(
+                db, user_id
+            )
+
+            if current_phase == "COMPLETED":
+                raise AppException(
+                    error_code="error.choice.all-completed",
+                    message="All phases completed",
+                    status_code=400,
+                )
+
+            current_phase_count = db.query(UserChoice).filter(
+                UserChoice.user_id == user_id,
+                UserChoice.phase == current_phase
+            ).count()
+            
+            if current_phase_count > 0:
+                logger.warning(
+                    f"User {user_id} has {current_phase_count} choices in phase {current_phase}. Deleting to redo phase.",
+                    extra={"user_id": str(user_id), "phase": current_phase}
+                )
+                
+                db.query(UserChoice).filter(
+                    UserChoice.user_id == user_id,
+                    UserChoice.phase == current_phase
+                ).delete()
+                db.flush()
+                
+                start_position = 1
+                
+            pool_image_ids = [choice["pool_image_id"] for choice in choices_data]
+            
+            if len(pool_image_ids) != len(set(pool_image_ids)):
+                raise AppException(
+                    error_code="error.choice.duplicate-images",
+                    message="Cannot vote for the same image multiple times in one submission",
+                    status_code=400,
+                )
+            pool_images = db.query(PoolImage).filter(
+                        PoolImage.id.in_(pool_image_ids),
+                        PoolImage.is_active == True
+                    ).all()
+
+            if len(pool_images) != 20:
+                raise AppException(
+                    error_code="error.choice.invalid-images",
+                    message=f"Found {len(pool_images)} valid images, need exactly 20 active images",
+                    status_code=400,
+                )
+            
+            pool_images_dict = {img.id: img for img in pool_images}
+
+            invalid_images = []
+            for img_id in pool_image_ids:
+                img = pool_images_dict.get(img_id)
+                if not img:
+                    invalid_images.append(str(img_id))
+                elif current_phase not in img.phase_eligibility:
+                    invalid_images.append(f"{img_id} (not eligible for phase {current_phase})")
+
+            if invalid_images:
+                raise AppException(
+                    error_code="error.choice.invalid-phase-images",
+                    message=f"Some images are not eligible for phase {current_phase}",
+                    status_code=400,
+                    details={"invalid_images": invalid_images}
+                )
+            # Check if user already voted for any of these images (in previous phases)
+            existing_votes = db.query(UserChoice.pool_image_id).filter(
+                UserChoice.user_id == user_id,
+                UserChoice.pool_image_id.in_(pool_image_ids)
+            ).all()
+
+            if existing_votes:
+                already_voted = [str(vote[0]) for vote in existing_votes]
+                raise AppException(
+                    error_code="error.choice.already-voted",
+                    message=f"Already voted for {len(already_voted)} images in previous phases",
+                    status_code=400,
+                    details={"already_voted_images": already_voted}
+                )
+
+            # All validations passed - create all 20 choices
+            created_choices = []
+            for idx, choice_data in enumerate(choices_data):
+                pool_image_id = choice_data["pool_image_id"]
+                action = choice_data["action"]
+                response_time_ms = choice_data.get("response_time_ms")
+
+                # Validate action
+                try:
+                    choice_action = ChoiceType[action.upper()]
+                except KeyError:
+                    raise AppException(
+                        error_code="error.choice.invalid-action",
+                        message=f"Invalid action '{action}' at position {idx + 1}. Must be LIKE, PASS, or PREFER",
+                        status_code=400,
+                    )
+
+                # Create choice
+                position = start_position + idx
+                user_choice = UserChoice(
+                    user_id=user_id,
+                    pool_image_id=pool_image_id,
+                    phase=current_phase,
+                    position_in_phase=position,
+                    action=choice_action,
+                    response_time_ms=response_time_ms,
+                )
+
+                db.add(user_choice)
+                created_choices.append(user_choice)
+
+                # Update pool image statistics
+                PoolImageService.update_usage_statistics(
+                    db, pool_image_id, action.upper()
+                )
+
+            db.flush()
+
+            # Check if phase/all completed after batch
+            new_phase, new_position = UserChoiceService._get_current_phase_and_position(
+                db, user_id
+            )
+
+            # If completed all 3 phases, update user status
+            if new_phase == "COMPLETED":
+                user.status = UserStatus.COMPLETED
+                db.flush()
+
+            db.commit()
+
+            logger.info(
+                f"Successfully created 20 choices for user {user_id} phase {current_phase}",
+                extra={
+                    "user_id": str(user_id),
+                    "phase": current_phase,
+                    "new_phase": new_phase,
+                },
+            )
+
+            total_choices = UserChoiceService._count_user_choices(db, user_id)
+
+            # Calculate statistics
+            actions = [choice.action for choice in created_choices]
+            likes = sum(1 for a in actions if a == ChoiceType.LIKE)
+            passes = sum(1 for a in actions if a == ChoiceType.PASS)
+            prefers = sum(1 for a in actions if a == ChoiceType.PREFER)
+
+            return {
+                "success": True,
+                "choices_created": 20,
+                "phase_completed": current_phase,
+                "current_phase": new_phase if new_phase != "COMPLETED" else 3,
+                "phase_progress": f"{new_position - 1 if new_phase != 'COMPLETED' else 20}/20",
+                "total_choices": total_choices,
+                "all_completed": new_phase == "COMPLETED",
+                "statistics": {
+                    "likes": likes,
+                    "passes": passes,
+                    "prefers": prefers,
+                }
+            }
+
+        except AppException:
+            db.rollback()
+            raise
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error creating batch choices: {e}", exc_info=True)
+            raise
+
+    @staticmethod
     def get_user_progress(db: Session, user_id: UUID) -> dict:
         """
         Get user's current progress across all phases

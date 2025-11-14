@@ -1,12 +1,15 @@
 import logging
 from typing import Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ..core.auth_dependency import get_current_user
 from app.core.database import get_db
 from app.core.exception import AppException
 from app.models.user import User
 from app.schemas.user_choice import (
+    BatchChoiceSubmitRequest,
+    BatchChoiceSubmitResponse,
     ChoiceSubmitRequest,
     ChoiceSubmitResponse,
     UserProgressResponse,
@@ -17,41 +20,6 @@ from app.services.user_choice_service import UserChoiceService
 logger = logging.getLogger(__name__)
 
 choice_router = APIRouter(prefix="/choices", tags=["choices"])
-
-
-def get_current_user(
-    authorization: str = Header(...), db: Session = Depends(get_db)
-) -> User:
-    """
-    Get current user from session token
-
-    Args:
-        authorization: Bearer token from header
-        db: Database session
-
-    Returns:
-        User object
-
-    Raises:
-        HTTPException: If token invalid or user not found
-    """
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
-        )
-
-    session_token = authorization.replace("Bearer ", "")
-
-    user = db.query(User).filter(User.session_token == session_token).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid session token",
-        )
-
-    return user
 
 
 @choice_router.post(
@@ -104,6 +72,108 @@ def submit_choice(
             detail=f"Failed to submit choice: {str(e)}",
         )
 
+
+@choice_router.post(
+    "/batch",
+    response_model=BatchChoiceSubmitResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit exactly 20 choices for a phase (REQUIRED)",
+)
+def submit_batch_choices(
+    request: BatchChoiceSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Submit exactly 20 choices (LIKE/PASS/PREFER) for a phase
+
+    **STRICT REQUIREMENTS:**
+    - Must submit exactly 20 choices
+    - All choices must be for images eligible for current phase
+    - Cannot vote for same image twice
+    - Cannot vote for images already voted in previous phases
+    - If any validation fails, entire batch is rejected
+
+    **AUTO-REDO PHASE:**
+    - If user has incomplete choices in current phase (< 20), they will be deleted
+    - User must redo the entire phase with 20 new choices
+
+    **Request body example:**
+    ```json
+    {
+        "choices": [
+            {
+                "pool_image_id": "uuid-1",
+                "action": "LIKE",
+                "response_time_ms": 1500
+            },
+            {
+                "pool_image_id": "uuid-2",
+                "action": "PASS",
+                "response_time_ms": 800
+            },
+            ... (exactly 20 items total)
+        ]
+    }
+    ```
+
+    **Response:**
+    - Success: Phase completed, returns statistics
+    - Failure: Entire batch rejected with detailed error
+
+    **Phase progression:**
+    - Phase 1 (0-19 choices): Random diverse selection
+    - Phase 2 (20-39 choices): Based on Phase 1 preferences
+    - Phase 3 (40-59 choices): Based on Phase 1 + 2 preferences
+    - Completed (60+ choices): All phases done
+    """
+    try:
+        # Convert choices to dict format
+        choices_data = [
+            {
+                "pool_image_id": choice.pool_image_id,
+                "action": choice.action,
+                "response_time_ms": choice.response_time_ms,
+            }
+            for choice in request.choices
+        ]
+
+        result = UserChoiceService.create_batch_choices(
+            db=db,
+            user_id=current_user.id,
+            choices_data=choices_data,
+        )
+
+        likes = result["statistics"]["likes"]
+        passes = result["statistics"]["passes"]
+        prefers = result["statistics"]["prefers"]
+
+        message = f"Phase {result['phase_completed']} completed successfully! "
+        message += f"Stats: {likes} likes, {passes} passes, {prefers} prefers"
+
+        if result["all_completed"]:
+            message += " | All phases completed! 🎉"
+
+        return BatchChoiceSubmitResponse(
+            message=message,
+            success=result["success"],
+            choices_created=result["choices_created"],
+            phase_completed=result["phase_completed"],
+            current_phase=result["current_phase"],
+            phase_progress=result["phase_progress"],
+            total_choices=result["total_choices"],
+            all_completed=result["all_completed"],
+            statistics=result["statistics"],
+        )
+
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except Exception as e:
+        logger.error("Error submitting batch choices", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to submit batch choices: {str(e)}",
+        )
 
 @choice_router.get(
     "/progress",

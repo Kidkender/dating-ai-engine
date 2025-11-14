@@ -37,7 +37,7 @@ class DatingAppClient:
         if api_key:
             self.headers["Authorization"] = f"Bearer {api_key}"  # type: ignore
 
-    async def fetch_all_users(self, limit: Optional[int] = None) -> list[DatingAppUser]:
+    async def fetch_all_users(self, limit: Optional[int] = 1000) -> list[DatingAppUser]:
         """
         Fetch all users from dating app
 

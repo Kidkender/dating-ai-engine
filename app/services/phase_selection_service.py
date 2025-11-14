@@ -74,7 +74,16 @@ class PhaseSelectionService:
             user_id: UUID,
             limit: int
             ) -> List[PoolImage]:
-        phase_1_preferences = (db.query(UserChoice.user_id == user_id, UserChoice.phase == 1, UserChoice.action.in_([ChoiceType.LIKE, ChoiceType.PREFER]))).all()
+        # phase_1_preferences = (db.query(UserChoice.user_id == user_id, UserChoice.phase == 1, UserChoice.action.in_([ChoiceType.LIKE, ChoiceType.PREFER]))).all()
+        phase_1_preferences = (
+            db.query(UserChoice)
+            .filter(
+                UserChoice.user_id == user_id,
+                UserChoice.phase == 1,
+                UserChoice.action.in_([ChoiceType.LIKE, ChoiceType.PREFER])
+            )
+            .all()
+        )
 
         if not phase_1_preferences:
             logger.warning(f"User {user_id} has no Phase 1 preferrences, using random selection")
@@ -82,9 +91,14 @@ class PhaseSelectionService:
 
         preferred_embeddings = []
         for choice in phase_1_preferences:
-            if choice.pool_image and choice.pool_image.face_embedding:
+            if (
+                choice.pool_image is not None
+                and choice.pool_image.face_embedding is not None
+                and len(choice.pool_image.face_embedding) > 0
+            ):
                 embedding = np.array(choice.pool_image.face_embedding)
                 preferred_embeddings.append(embedding)
+
 
         if not preferred_embeddings:
             logger.warning(f"No valid embeddings found, using random selection")
@@ -114,7 +128,7 @@ class PhaseSelectionService:
         
         similarities = []
         for image in available_images:
-            if image.face_embedding:
+            if image.face_embedding is not None and len(image.face_embedding) > 0:
                 image_embedding = np.array(image.face_embedding)
                 similarity = PhaseSelectionService._cosine_similarity(
                     preference_vector, image_embedding

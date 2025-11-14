@@ -22,7 +22,7 @@ sync_router = APIRouter(prefix="/sync", tags=["sync"])
 @inject
 async def sync_users(
     sync_request: SyncRequest = Body(
-        default=SyncRequest(limit=100, force_resync=False, min_face_confidence=0.9)
+        default=SyncRequest(limit=1000, force_resync=False, min_face_confidence=0.9)
     ),
     sync_orchestrator: SyncOrchestrator = Depends(get_sync_orchestrator),
 ):

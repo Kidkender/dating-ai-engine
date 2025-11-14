@@ -19,7 +19,7 @@ for sub in subfolders:
         for f in os.listdir(folder_path)
         if f.lower().endswith((".png", ".jpg", ".jpeg"))
     ]
-    print(f"Processing {sub} ({len(img_files)} images)...")
+    # print(f"Processing {sub} ({len(img_files)} images)...")
 
     for i in range(0, len(img_files), batch_size):
         batch_imgs = [
