@@ -3,6 +3,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ..constants.error_constant import ERROR_CHOICE_FETCH_FAILED, ERROR_CHOICE_PROGRESS_FETCH_FAILED, ERROR_CHOICE_SUBMIT_FAILED
+
 from ..core.auth_dependency import AuthResult, get_current_user
 from app.core.database import get_db
 from app.core.exception import AppException
@@ -66,9 +68,9 @@ def submit_choice(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         logger.error("Error submitting choice", exc_info=True)
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit choice: {str(e)}",
+            error_code=ERROR_CHOICE_SUBMIT_FAILED
         )
 
 
@@ -169,9 +171,9 @@ def submit_batch_choices(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         logger.error("Error submitting batch choices", exc_info=True)
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit batch choices: {str(e)}",
+            error_code=ERROR_CHOICE_SUBMIT_FAILED
         )
 
 @choice_router.get(
@@ -202,9 +204,9 @@ def get_progress(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         logger.error("Error getting progress", exc_info=True)
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get progress: {str(e)}",
+            error_code=ERROR_CHOICE_PROGRESS_FETCH_FAILED
         )
 
 
@@ -242,9 +244,9 @@ def get_my_choices(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         logger.error("Error getting user choices", exc_info=True)
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get choices: {str(e)}",
+            error_code=ERROR_CHOICE_FETCH_FAILED 
         )
         
-        
+     

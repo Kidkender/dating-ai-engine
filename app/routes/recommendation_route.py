@@ -2,10 +2,11 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ..constants.error_constant import ERROR_REC_FETCH_FAILED, ERROR_REC_GENERATE_FAILED, ERROR_REC_PREFERENCE_PROFILE_FAILED
+
 from ..core.auth_dependency import AuthResult, get_current_user
 from app.core.database import get_db
 from app.core.exception import AppException
-from app.models.user import User
 from app.schemas.recommendation import (
     PreferenceProfileResponse,
     GenerateRecommendationsResponse,
@@ -26,7 +27,7 @@ recommendation_router = APIRouter(prefix="/recommendations", tags=["recommendati
 )
 def get_preference_profile(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    auth: AuthResult = Depends(get_current_user),
 ):
     """
     Get user's preference profile built from all 3 phases
@@ -42,7 +43,7 @@ def get_preference_profile(
     """
     try:
         profile = RecommendationService.build_user_preference_profile(
-            db=db, user_id=current_user.id
+            db=db, user_id=auth.user.id
         )
 
         return PreferenceProfileResponse(**profile)
@@ -51,9 +52,9 @@ def get_preference_profile(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         logger.error("Error getting preference profile", exc_info=True)
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get preference profile: {str(e)}",
+            error_code=ERROR_REC_PREFERENCE_PROFILE_FAILED
         )
 
 
@@ -138,9 +139,9 @@ def generate_recommendations(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
         logger.error("Error generating recommendations", exc_info=True)
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate recommendations: {str(e)}",
+            error_code=ERROR_REC_GENERATE_FAILED
         )
 
 
@@ -167,6 +168,7 @@ async def get_my_recommendations(
     - Includes user info and primary image
     """
     try:
+        print(f"user_id: {auth.user.id}")
 
         recommendations = await RecommendationService.get_user_recommendations(
             db=db,
@@ -176,22 +178,9 @@ async def get_my_recommendations(
         )
         return recommendations
 
-        # if not recommendations:
-        #     return RecommendationsResponse(
-        #         message="No recommendations found. Generate recommendations first.",
-        #         total_recommendations=0,
-        #         recommendations=[],
-        #     )
-
-        # return RecommendationsResponse(
-        #     message=f"Found {len(recommendations)} recommendations",
-        #     total_recommendations=len(recommendations),
-        #     recommendations=recommendations,
-        # )
-
     except Exception as e:
         logger.error("Error getting recommendations", exc_info=True)
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get recommendations: {str(e)}",
+            error_code=ERROR_REC_FETCH_FAILED
         )

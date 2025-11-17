@@ -209,12 +209,12 @@ class UserChoiceService:
                     status_code=404,
                 )
 
-            if user.status != UserStatus.ACTIVE:
-                raise AppException(
-                    error_code="error.user.not-active",
-                    message="User is not active",
-                    status_code=400,
-                )
+            # if user.status != UserStatus.ACTIVE:
+            #     raise AppException(
+            #         error_code="error.user.not-active",
+            #         message="User is not active",
+            #         status_code=400,
+            #     )
 
             # Get current phase
             current_phase, start_position = UserChoiceService._get_current_phase_and_position(

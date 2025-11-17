@@ -39,3 +39,20 @@ ERROR_EXT_DATING_APP_AUTH_FAILED = "error.external.dating-app-auth-failed"
 ERROR_VAL_INVALID_INPUT = "error.validation.invalid-input"
 ERROR_VAL_MISSING_REQUIRED = "error.validation.missing-required"
 ERROR_VAL_OUT_OF_RANGE = "error.validation.out-of-range"
+
+ERROR_AUTH_INVALID_OR_EXPIRED_TOKEN = "error.auth.invalid-or-expired-token"
+ERROR_AUTH_USER_ID_NOT_FOUND = "error.auth.user-id-not-found"
+ERROR_AUTH_AUTHENTICATION_FAILED = "error.auth.authentication-failed"
+
+
+ERROR_REC_USER_COMPLETED_ALL_PHASES = "error.recommendation.user-completed-all-phases"
+ERROR_REC_NO_IMAGES_FOR_PHASE = "error.recommendation.no-images-for-phase"
+ERROR_REC_FETCH_FAILED = "error.recommendation.fetch-failed"
+
+ERROR_REC_PREFERENCE_PROFILE_FAILED = "error.recommendation.preference-profile-failed"
+ERROR_REC_GENERATE_FAILED = "error.recommendation.generate-failed"
+
+
+ERROR_CHOICE_SUBMIT_FAILED = "error.choice.submit-failed"
+ERROR_CHOICE_PROGRESS_FETCH_FAILED = "error.choice.progress-fetch-failed"
+ERROR_CHOICE_FETCH_FAILED = "error.choice.fetch-failed"

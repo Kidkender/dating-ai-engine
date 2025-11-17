@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
@@ -25,7 +25,14 @@ class SingleChoiceItem(BaseModel):
         if v.upper() not in ['LIKE', 'PASS', 'PREFER']:
             raise ValueError('Action must be LIKE, PASS, or PREFER')
         return v.upper()
-
+    
+    @field_validator('pool_image_id', mode='before')
+    @classmethod
+    def validate_pool_image_id(cls, v: Any) -> UUID:
+        try:
+            return UUID(str(v))
+        except Exception:
+            raise ValueError('pool_image_id must be a valid UUID')
 
 class BatchChoiceSubmitRequest(BaseModel):
     """Request to submit multiple choices at once"""

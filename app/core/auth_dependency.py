@@ -3,6 +3,10 @@ import logging
 from fastapi import Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 
+from ..constants.error_constant import ERROR_AUTH_AUTHENTICATION_FAILED, ERROR_AUTH_INVALID_OR_EXPIRED_TOKEN, ERROR_AUTH_USER_ID_NOT_FOUND
+
+from .exception import AppException
+
 from ..services.auth_service import AuthService
 
 from ..models.user import User
@@ -57,15 +61,16 @@ async def get_current_user(
             extra={"error": error_message}
         )
         
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid or expired token: {error_message}"
+            # detail=f"Invalid or expired token: {error_message}"
+            error_code=ERROR_AUTH_INVALID_OR_EXPIRED_TOKEN
         )
         
     if not user_id:
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User ID not found in token"
+            error_code=ERROR_AUTH_USER_ID_NOT_FOUND
         )
     
     try: 
@@ -74,9 +79,9 @@ async def get_current_user(
 
     except Exception as e:
         logger.error(f"Error getting user: {e}", exc_info=True)
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to authenticate user: {str(e)}",
+            error_code=ERROR_AUTH_AUTHENTICATION_FAILED
         )
     
 async def get_current_user_optional(

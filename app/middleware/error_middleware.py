@@ -33,8 +33,7 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-            # AppException extends HTTPException, FastAPI tự động handle
-            # Nhưng nếu muốn custom format thì return ở đây
+
             return JSONResponse(
                 status_code=exc.status_code,
                 content=exc.detail,  # Already formatted in AppException
@@ -84,8 +83,6 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                     "message": "An unexpected error occurred",
                     "details": {
                         "error_type": type(exc).__name__,
-                        # Chỉ show error message trong dev, production thì ẩn
-                        # "error": str(exc),
                     },
                 },
             )

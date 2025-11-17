@@ -2,6 +2,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ..constants.error_constant import ERROR_REC_FETCH_FAILED, ERROR_REC_NO_IMAGES_FOR_PHASE, ERROR_REC_USER_COMPLETED_ALL_PHASES
+
+from ..core.exception import AppException
+
 from ..core.auth_dependency import AuthResult, get_current_user_optional
 from app.core.database import get_db
 from app.core.config import settings
@@ -146,9 +150,9 @@ def get_recommendations(
         current_phase = progress["current_phase"]
 
         if progress["all_completed"]:
-            raise HTTPException(
+            raise AppException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User has completed all phases",
+                error_code=ERROR_REC_USER_COMPLETED_ALL_PHASES
             )
 
         # Get personalized recommendations
@@ -160,9 +164,11 @@ def get_recommendations(
         )
 
         if not images:
-            raise HTTPException(
+            logger.warning(f"No available images for phase {current_phase}")
+            
+            raise AppException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No available images for phase {current_phase}",
+                error_code=ERROR_REC_NO_IMAGES_FOR_PHASE
             )
 
         logger.info(
@@ -179,7 +185,7 @@ def get_recommendations(
         raise
     except Exception as e:
         logger.error("Error getting recommendations", exc_info=True)
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get recommendations: {str(e)}",
+            error_code=ERROR_REC_FETCH_FAILED
         )
