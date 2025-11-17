@@ -1,10 +1,12 @@
 import secrets
+from uuid import UUID
 from sqlalchemy.orm import Session
 from app.core.database import transactional
 from app.core.exception import AppException
 from app.schemas.user import UserCreate, UserResponse, UserStatus
 from app.models.user import User
-from app.constants.error_constant import ERROR_USER_DUPLICATE_EMAIL
+from app.constants.error_constant import ERROR_USER_DUPLICATE_EMAIL, ERROR_USER_NOT_FOUND
+from fastapi import status
 import logging
 
 
@@ -53,3 +55,14 @@ class UserService:
             db.flush()
             db.refresh(db_user)
             return UserResponse.model_validate(db_user)
+
+    @staticmethod
+    def get_user_by_id(db: Session, user_id: UUID) -> User | None :
+        exist_user = db.query(User).filter(User.id == user_id).first()
+        if exist_user is None:
+          raise AppException(
+              error_code=ERROR_USER_NOT_FOUND,
+              status_code=status.HTTP_404_NOT_FOUND
+          )
+        return exist_user
+        

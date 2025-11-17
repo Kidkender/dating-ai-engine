@@ -248,5 +248,16 @@ def get_my_choices(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             error_code=ERROR_CHOICE_FETCH_FAILED 
         )
-        
-     
+
+@choice_router.delete(
+    "/reset",
+    status_code=status.HTTP_200_OK,
+    summary="Reset choices",
+)        
+def reset_user_choice(  
+    db: Session = Depends(get_db),
+    auth: AuthResult = Depends(get_current_user)
+):
+    return UserChoiceService.reset_choice(
+            db=db, user_id=auth.user.id
+    )

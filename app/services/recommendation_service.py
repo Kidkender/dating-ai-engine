@@ -360,3 +360,15 @@ class RecommendationService:
         except Exception as e:
             logger.error(f"Error getting recommendations: {e}", exc_info=True)
             raise
+        
+    @staticmethod
+    def remove_all_recommendation(db: Session, user_id: UUID):
+        recommendation = db.query(Recommendation).filter(Recommendation.user_id == user_id).all()
+        if len(recommendation) ==0 :
+            logger.info(f"Not found recommendation for user {user_id}")
+
+        db.query(Recommendation).filter(Recommendation.user_id == user_id).delete()
+        db.flush()
+        logger.info(f"[DONE] Reset all recommendation for user {user_id}")
+    
+        

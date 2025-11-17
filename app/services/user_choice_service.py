@@ -4,6 +4,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from app.services.user_service import UserService as user_service
+from app.services.recommendation_service import RecommendationService as recommendation_service
+from ..core.database import transactional
 from app.models.user_choice import UserChoice, ChoiceType
 from app.models.user import User, UserStatus
 from app.models.pool_image import PoolImage
@@ -567,3 +570,15 @@ class UserChoiceService:
         except Exception as e:
             logger.error(f"Error getting user choices: {e}", exc_info=True)
             raise
+        
+    @staticmethod
+    def reset_choice( db: Session, user_id: UUID) -> bool: 
+        with transactional(db):
+            user_service.get_user_by_id(db,user_id)
+
+            db.query(UserChoice).filter(UserChoice.user_id ==  user_id).delete()
+            recommendation_service.remove_all_recommendation(db, user_id)
+                    
+            logger.info(f"[DONE] User {user_id} delete choice")
+        return True
+        
