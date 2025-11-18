@@ -205,6 +205,12 @@ MODEL_DIR=./app/ml/models
 DATASET_PATH=../dataset/ALL/ALL
 ```
 
+### Start
+
+```bash
+    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
 ### Configuration Options
 
 | Variable               | Description                       | Default  |
