@@ -2,22 +2,29 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..constants.error_constant import ERROR_REC_FETCH_FAILED, ERROR_REC_NO_IMAGES_FOR_PHASE, ERROR_REC_USER_COMPLETED_ALL_PHASES
+from ..core.config import settings
+
+from ..services.face_processing_service import FaceProcessingService
+
+from ..constants.error_constant import ERROR_REC_FETCH_FAILED
 
 from ..core.exception import AppException
 
 from ..core.auth_dependency import AuthResult, get_current_user_optional
 from app.core.database import get_db
-from app.core.config import settings
 from app.schemas.pool_image import ImportSummary, PhaseImagesResponse, PoolImageResponse
 from ..services.phase_selection_service import PhaseSelectionService
 from ..services.import_service import ImportService
 from app.services.pool_image_service import PoolImageService
-from app.services.face_processing_service import FaceProcessingService
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 pool_image_router = APIRouter(prefix="/pool-images", tags=["pool-images"])
+
+
+def __get_pool_service(db: Session = Depends(get_db)) -> PoolImageService:
+    return PoolImageService(db)
 
 @pool_image_router.post(
     "/import",
@@ -25,19 +32,13 @@ pool_image_router = APIRouter(prefix="/pool-images", tags=["pool-images"])
     status_code=status.HTTP_200_OK,
     summary="Import pool images from local dataset",
 )
-def import_pool_images(db: Session = Depends(get_db)):
-    """
-    Import pool images from local dataset (round1, round2, round3)
+def import_pool_images(
+    db: Session = Depends(get_db)
+    ):
 
-    This endpoint processes all images from the local dataset folder structure:
-    - dataset/ALL/ALL/round1/ → Phase 1 images
-    - dataset/ALL/ALL/round2/ → Phase 2 images
-    - dataset/ALL/ALL/round3/ → Phase 3 images
-    """
     try:
-        logger.info("Starting pool images import")
-
-        dataset_path = getattr(settings, "DATASET_PATH", "../dataset/ALL/ALL")
+        BASE_DIR = Path(__file__).resolve().parents[2]
+        dataset_path = str(BASE_DIR / "static")
 
         face_processor = FaceProcessingService(
             min_confidence=settings.MIN_FACE_CONFIDENCE
@@ -46,7 +47,7 @@ def import_pool_images(db: Session = Depends(get_db)):
         importer = ImportService(
             db=db,
             face_processor=face_processor,
-            dataset_base_path=dataset_path,
+            dataset_base_path=dataset_path,\
         )
 
         summary = importer.import_all_rounds()
@@ -90,13 +91,10 @@ def import_pool_images(db: Session = Depends(get_db)):
     status_code=status.HTTP_200_OK,
     summary="Get images for a specific phase",
 )
-def get_phase_images(phase: int, db: Session = Depends(get_db)):
-    """
-    Get all images for a specific phase
+def get_phase_images(
+    phase: int,
+    service: PoolImageService = Depends(__get_pool_service)):
 
-    Args:
-        phase: Phase number (1, 2, or 3)
-    """
     if phase not in [1, 2, 3]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -104,7 +102,7 @@ def get_phase_images(phase: int, db: Session = Depends(get_db)):
         )
 
     try:
-        images = PoolImageService.get_images_by_phase(db, phase)
+        images = service.get_images_by_phase( phase)
 
         return PhaseImagesResponse(
             phase=phase,
@@ -119,9 +117,6 @@ def get_phase_images(phase: int, db: Session = Depends(get_db)):
             detail=f"Failed to fetch images: {str(e)}",
         )
 
-
-
-
 @pool_image_router.get(
     "/recommendations",
     response_model=PhaseImagesResponse,
@@ -132,51 +127,17 @@ def get_recommendations(
     db: Session = Depends(get_db),
     auth: AuthResult = Depends(get_current_user_optional),
 ):
-    """
-    Get personalized image recommendations based on user's phase and preferences
-
-    **Phase 1:** Random diverse selection (exploration)
-    **Phase 2:** Similar to Phase 1 LIKED/PREFERRED images (refinement)
-    **Phase 3:** Similar to Phase 2 preferences with Phase 1 context (fine-tuning)
-
-    The system automatically determines the user's current phase and returns
-    20 personalized images.
-    """
+   
     try:
-        # Determine current phase from user progress
-        from app.services.user_choice_service import UserChoiceService
-
-        progress = UserChoiceService.get_user_progress(db, auth.user.id)
-        current_phase = progress["current_phase"]
-
-        if progress["all_completed"]:
-            raise AppException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                error_code=ERROR_REC_USER_COMPLETED_ALL_PHASES
-            )
-
-        # Get personalized recommendations
-        images = PhaseSelectionService.get_images_for_user(
-            db=db,
+        phase_selection_service = PhaseSelectionService(db)
+        phase, images = phase_selection_service.get_images_for_user(
             user_id=auth.user.id,
-            phase=current_phase,
             limit=20,
         )
 
-        if not images:
-            logger.warning(f"No available images for phase {current_phase}")
-            
-            raise AppException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                error_code=ERROR_REC_NO_IMAGES_FOR_PHASE
-            )
-
-        logger.info(
-            f"Returning {len(images)} recommendations for user {auth.user.id} phase {current_phase}"
-        )
 
         return PhaseImagesResponse(
-            phase=current_phase,
+            phase=phase,
             total_images=len(images),
             images=[PoolImageResponse.model_validate(img) for img in images],
         )

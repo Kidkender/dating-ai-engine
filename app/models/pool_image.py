@@ -8,6 +8,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
@@ -83,6 +84,8 @@ class PoolImage(Base):
             "phase_3_priority >= 1 AND phase_3_priority <= 10",
             name="check_phase3_priority",
         ),
+        Index('idx_phase_eligibility', 'phase_eligibility', postgresql_using='gin'),  
+        Index('idx_active_phase', 'is_active', 'phase_eligibility'),  
     )
 
     def __repr__(self):

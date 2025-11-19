@@ -15,14 +15,16 @@ logger = logging.getLogger(__name__)
 
 class UserService:
     """Service layer for user operations"""
+    
+    def __init__(self, db: Session):
+        self.db = db
 
     @staticmethod
     def generate_session_token() -> str:
 
         return secrets.token_urlsafe(32)
 
-    @staticmethod
-    def create_user(db: Session, user_data: UserCreate) -> UserResponse:
+    def create_user(self, user_data: UserCreate) -> UserResponse:
         """
         Create a new user
 
@@ -36,8 +38,8 @@ class UserService:
         Raises:
             DuplicateEmailError: If email already exists
         """
-        with transactional(db):
-            existing_user = db.query(User).filter(User.email == user_data.email).first()
+        with transactional(self.db):
+            existing_user = self.db.query(User).filter(User.email == user_data.email).first()
             if existing_user:
                 raise AppException(ERROR_USER_DUPLICATE_EMAIL)
 
@@ -51,14 +53,13 @@ class UserService:
                 status=UserStatus.ONBOARDING,
             )
 
-            db.add(db_user)
-            db.flush()
-            db.refresh(db_user)
+            self.db.add(db_user)
+            self.db.flush()
+            self.db.refresh(db_user)
             return UserResponse.model_validate(db_user)
 
-    @staticmethod
-    def get_user_by_id(db: Session, user_id: UUID) -> User | None :
-        exist_user = db.query(User).filter(User.id == user_id).first()
+    def get_user_by_id(self, user_id: UUID) -> User | None :
+        exist_user = self.db.query(User).filter(User.id == user_id).first()
         if exist_user is None:
           raise AppException(
               error_code=ERROR_USER_NOT_FOUND,

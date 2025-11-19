@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..constants.error_constant import ERROR_CHOICE_FETCH_FAILED, ERROR_CHOICE_PROGRESS_FETCH_FAILED, ERROR_CHOICE_SUBMIT_FAILED
+from ..constants.error_constant import ERROR_CHOICE_SUBMIT_FAILED
 
 from ..core.auth_dependency import AuthResult, get_current_user
 from app.core.database import get_db
@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 choice_router = APIRouter(prefix="/choices", tags=["choices"])
 
 
+def __get_user_choice_service(db: Session = Depends(get_db)) -> UserChoiceService:
+    return UserChoiceService(db)
+
 @choice_router.post(
     "",
     response_model=ChoiceSubmitResponse,
@@ -31,7 +34,7 @@ choice_router = APIRouter(prefix="/choices", tags=["choices"])
 )
 def submit_choice(
     request: ChoiceSubmitRequest,
-    db: Session = Depends(get_db),
+    service: UserChoiceService = Depends(__get_user_choice_service),
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -48,8 +51,7 @@ def submit_choice(
     4. Return current progress
     """
     try:
-        result = UserChoiceService.create_choice(
-            db=db,
+        result = service.create_choice(
             user_id=auth.user.id,
             pool_image_id=request.pool_image_id,
             action=request.action,
@@ -82,54 +84,13 @@ def submit_choice(
 )
 def submit_batch_choices(
     request: BatchChoiceSubmitRequest,
-    db: Session = Depends(get_db),
+    service: UserChoiceService = Depends(__get_user_choice_service),
     auth: AuthResult = Depends(get_current_user),
 ):
-    """
-    Submit exactly 20 choices (LIKE/PASS/PREFER) for a phase
 
-    **STRICT REQUIREMENTS:**
-    - Must submit exactly 20 choices
-    - All choices must be for images eligible for current phase
-    - Cannot vote for same image twice
-    - Cannot vote for images already voted in previous phases
-    - If any validation fails, entire batch is rejected
-
-    **AUTO-REDO PHASE:**
-    - If user has incomplete choices in current phase (< 20), they will be deleted
-    - User must redo the entire phase with 20 new choices
-
-    **Request body example:**
-    ```json
-    {
-        "choices": [
-            {
-                "pool_image_id": "uuid-1",
-                "action": "LIKE",
-                "response_time_ms": 1500
-            },
-            {
-                "pool_image_id": "uuid-2",
-                "action": "PASS",
-                "response_time_ms": 800
-            },
-            ... (exactly 20 items total)
-        ]
-    }
-    ```
-
-    **Response:**
-    - Success: Phase completed, returns statistics
-    - Failure: Entire batch rejected with detailed error
-
-    **Phase progression:**
-    - Phase 1 (0-19 choices): Random diverse selection
-    - Phase 2 (20-39 choices): Based on Phase 1 preferences
-    - Phase 3 (40-59 choices): Based on Phase 1 + 2 preferences
-    - Completed (60+ choices): All phases done
-    """
     try:
         # Convert choices to dict format
+        print(f"data: {request}")
         choices_data = [
             {
                 "pool_image_id": choice.pool_image_id,
@@ -139,8 +100,7 @@ def submit_batch_choices(
             for choice in request.choices
         ]
 
-        result = UserChoiceService.create_batch_choices(
-            db=db,
+        result = service.create_batch_choices(
             user_id=auth.user.id,
             choices_data=choices_data,
         )
@@ -183,7 +143,7 @@ def submit_batch_choices(
     summary="Get user's current progress",
 )
 def get_progress(
-    db: Session = Depends(get_db),
+    service: UserChoiceService = Depends(__get_user_choice_service),
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -195,20 +155,9 @@ def get_progress(
     - Total choices made
     - Completion status for each phase
     """
-    try:
-        progress = UserChoiceService.get_user_progress(db=db, user_id=auth.user.id)
+    progress = service.get_user_progress(user_id=auth.user.id)
 
-        return UserProgressResponse(**progress)
-
-    except AppException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-    except Exception as e:
-        logger.error("Error getting progress", exc_info=True)
-        raise AppException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            error_code=ERROR_CHOICE_PROGRESS_FETCH_FAILED
-        )
-
+    return UserProgressResponse(**progress)
 
 @choice_router.get(
     "/me",
@@ -218,7 +167,7 @@ def get_progress(
 )
 def get_my_choices(
     phase: Optional[int] = None,
-    db: Session = Depends(get_db),
+    service: UserChoiceService = Depends(__get_user_choice_service),
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -233,31 +182,19 @@ def get_my_choices(
     - Action taken
     - Statistics (likes, passes, prefers)
     """
-    try:
-        result = UserChoiceService.get_user_choices(
-            db=db, user_id=auth.user.id, phase=phase
+    result = service.get_user_choices(
+             user_id=auth.user.id, phase=phase
         )
 
-        return UserChoicesListResponse(**result)
-
-    except AppException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-    except Exception as e:
-        logger.error("Error getting user choices", exc_info=True)
-        raise AppException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            error_code=ERROR_CHOICE_FETCH_FAILED 
-        )
+    return UserChoicesListResponse(**result)
 
 @choice_router.delete(
     "/reset",
     status_code=status.HTTP_200_OK,
     summary="Reset choices",
 )        
-def reset_user_choice(  
-    db: Session = Depends(get_db),
+def reset_user_choice(
+    service: UserChoiceService = Depends(__get_user_choice_service),
     auth: AuthResult = Depends(get_current_user)
 ):
-    return UserChoiceService.reset_choice(
-            db=db, user_id=auth.user.id
-    )
+    return service.reset_choice(user_id=auth.user.id)

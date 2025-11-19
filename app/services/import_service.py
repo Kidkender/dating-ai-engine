@@ -23,12 +23,7 @@ class ImportService:
         self.dataset_base_path = dataset_base_path
 
     def import_all_rounds(self) -> dict:
-        """
-        Import all 3 rounds from local dataset
-
-        Returns:
-            Summary dict with import statistics
-        """
+      
         summary = {
             "round1": {"total": 0, "success": 0, "failed": 0, "skipped": 0},
             "round2": {"total": 0, "success": 0, "failed": 0, "skipped": 0},

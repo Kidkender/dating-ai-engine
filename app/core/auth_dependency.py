@@ -45,7 +45,7 @@ async def get_current_user(
         )
         
     access_token = authorization.replace("Bearer ", "").strip()
-    
+    print(f"access token: {access_token}")
     if not access_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

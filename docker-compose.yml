@@ -1,6 +1,9 @@
 services:
   db:
     image: ankane/pgvector:latest
+    container_name: dating_ai_db
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -9,6 +12,22 @@ services:
       - "${PG_PORT}:5432"
     volumes:
       - ${PG_VOLUME}:/var/lib/postgresql/data
+      - ./activate-vector.sh:/docker-entrypoint-activate-vector/activate-vector.sh:ro
+
+  # app:
+  #   build: .
+  #   container_name: dating_ai_app
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     - db
+  #   environment:
+  #     DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  #   volumes:
+  #     - ./app:/app
+  #   ports:
+  #     - "8000:8000"
+  #   working_dir: /app
 
 volumes:
   pgdata:

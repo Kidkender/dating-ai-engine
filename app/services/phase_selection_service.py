@@ -1,9 +1,13 @@
 import logging
-from typing import List
+from typing import List, Tuple
 from uuid import UUID
-from sqlalchemy.orm import Session
 import random
 import numpy as np
+from fastapi import status
+from sqlalchemy.orm import Session
+from ..constants.error_constant import ERROR_REC_NO_IMAGES_FOR_PHASE, ERROR_REC_USER_COMPLETED_ALL_PHASES
+
+from .user_choice_service import UserChoiceService
 from ..core.exception import AppException
 
 from ..models.pool_image import PoolImage
@@ -13,14 +17,24 @@ logger = logging.getLogger(__name__)
 class PhaseSelectionService:
     """Service for intelligent phase-based image selection"""
     
-    @staticmethod
+    def __init__(self, db: Session):
+        self.db = db
+        self.choice_service = UserChoiceService(db)
+    
     def get_images_for_user(
-        db: Session,
+        self,
         user_id: UUID,
-        phase: int,
         limit: int = 20
-    ) -> List[PoolImage]:
+    ) -> Tuple[int,List[PoolImage]]:
         
+        progress = self.choice_service.get_user_progress(user_id)
+        phase = progress["current_phase"]
+        if progress["all_completed"]:
+            raise AppException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                error_code=ERROR_REC_USER_COMPLETED_ALL_PHASES
+            )
+
         if phase not in [1,2,3]:
           raise AppException(
               error_code="error.validation.invalid-phase",
@@ -28,27 +42,38 @@ class PhaseSelectionService:
           )
         
         if phase == 1:
-            return PhaseSelectionService._select_phase_1_images(db, user_id, limit)
+            images = self._select_phase_1_images( user_id, limit)
+            phase =1
         elif phase == 2:
-            return PhaseSelectionService._select_phase_2_images(db, user_id, limit)
+            images = self._select_phase_2_images( user_id, limit)
+            phase =2
         else:
-            return PhaseSelectionService._select_phase_3_images(db, user_id, limit)
+            images = self._select_phase_3_images( user_id, limit)
+            phase =3
+
+        if not images:
+            
+            raise AppException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                error_code=ERROR_REC_NO_IMAGES_FOR_PHASE
+            )
+        return phase, images
         
-    @staticmethod
+    
     def _select_phase_1_images(
-            db: Session,
+            self,
             user_id: UUID,
             limit: int
             ) -> List[PoolImage]:
         logger.info("Selecting Phase 1 images for user {user_id}")
 
         voted_image_ids = (
-                db.query(UserChoice.pool_image_id)
+                self.db.query(UserChoice.pool_image_id)
                 .filter(UserChoice.user_id == user_id).all()
                 )
         voted_ids = [img_id[0] for img_id in voted_image_ids]
 
-        query = db.query(PoolImage).filter(
+        query = self.db.query(PoolImage).filter(
                 PoolImage.is_active == True,
                 PoolImage.phase_eligibility.any(1)
                 )
@@ -68,15 +93,15 @@ class PhaseSelectionService:
         logger.info(f"Selected {len(selected_images)} images for phase 1")
         return selected_images
 
-    @staticmethod
+    
     def _select_phase_2_images(
-            db: Session,
+            self,
             user_id: UUID,
             limit: int
             ) -> List[PoolImage]:
         # phase_1_preferences = (db.query(UserChoice.user_id == user_id, UserChoice.phase == 1, UserChoice.action.in_([ChoiceType.LIKE, ChoiceType.PREFER]))).all()
         phase_1_preferences = (
-            db.query(UserChoice)
+            self.db.query(UserChoice)
             .filter(
                 UserChoice.user_id == user_id,
                 UserChoice.phase == 1,
@@ -87,7 +112,7 @@ class PhaseSelectionService:
 
         if not phase_1_preferences:
             logger.warning(f"User {user_id} has no Phase 1 preferrences, using random selection")
-            return PhaseSelectionService._select_random_phase_images(db, user_id, 2, limit)
+            return self._select_random_phase_images(user_id, 2, limit)
 
         preferred_embeddings = []
         for choice in phase_1_preferences:
@@ -103,16 +128,16 @@ class PhaseSelectionService:
         if not preferred_embeddings:
             logger.warning(f"No valid embeddings found, using random selection")
 
-            return PhaseSelectionService._select_random_phase_images(db, user_id, 2, limit)
+            return self._select_random_phase_images( user_id, 2, limit)
 
         preference_vector = np.mean(preferred_embeddings, axis=0)
 
         voted_image_ids = (
-                db.query(UserChoice.pool_image_id).filter(UserChoice.user_id == user_id).all()
+                self.db.query(UserChoice.pool_image_id).filter(UserChoice.user_id == user_id).all()
                 )
         voted_ids = [img_id[0]  for img_id in voted_image_ids]
 
-        query = db.query(PoolImage).filter(
+        query = self.db.query(PoolImage).filter(
                 PoolImage.is_active == True,
                 PoolImage.phase_eligibility.any(2)
                 )
@@ -130,7 +155,7 @@ class PhaseSelectionService:
         for image in available_images:
             if image.face_embedding is not None and len(image.face_embedding) > 0:
                 image_embedding = np.array(image.face_embedding)
-                similarity = PhaseSelectionService._cosine_similarity(
+                similarity = self._cosine_similarity(
                     preference_vector, image_embedding
                 )
                 similarities.append((image, similarity))
@@ -144,19 +169,19 @@ class PhaseSelectionService:
 
         return selected_images
 
-    @staticmethod
+    
     def _select_phase_3_images(
-            db: Session,
+            self,
             user_id: UUID,
             limit: int
             ) -> List[PoolImage]:
             
-        phase_1_preferrences = (db.query(UserChoice)
+        phase_1_preferrences = (self.db.query(UserChoice)
                                 .filter(UserChoice.user_id == user_id,
                                 UserChoice.phase == 1,
                                 UserChoice.action.in_([ChoiceType.LIKE, ChoiceType.PREFER
                             ])).all())
-        phase_2_preferrences = (db.query(UserChoice)
+        phase_2_preferrences = (self.db.query(UserChoice)
                                 .filter(UserChoice.user_id == user_id,
                                 UserChoice.phase == 2,
                                 UserChoice.action.in_([ChoiceType.LIKE, ChoiceType.PREFER
@@ -165,7 +190,7 @@ class PhaseSelectionService:
         
         if not all_preferences :
             logger.warning(f"User {user_id} has no preferrences, using random selection")
-            return PhaseSelectionService._select_random_phase_images(db, user_id, 3, limti)
+            return self._select_random_phase_images( user_id, 3, limit=limit)
         
         preferred_embeddings = []
         for choice in all_preferences:
@@ -178,7 +203,7 @@ class PhaseSelectionService:
 
         if not preferred_embeddings:
             logger.warning(f"No valid embedding found, using random selection")
-            return PhaseSelectionService._select_random_phase_images(db, user_id, 3, limit)
+            return self._select_random_phase_images(db, user_id, 3, limit)
 
         preferred_vector = np.mean(preferred_embeddings, axis=0)
 
@@ -189,7 +214,7 @@ class PhaseSelectionService:
 
         voted_ids = [img_id[0] for img_id in voted_image_ids]
 
-        query = db.query(PoolImage).filter(
+        query = self.db.query(PoolImage).filter(
             PoolImage.is_active == True
             ,PoolImage.phase_eligibility.any(3)
             )
@@ -208,7 +233,7 @@ class PhaseSelectionService:
         for image in available_images:
             if image.face_embedding is not None:
                 image_embedding = np.array(image.face_embedding)
-                similarity = PhaseSelectionService._cosine_similarity(
+                similarity = self._cosine_similarity(
                     preferred_vector, image_embedding
                 )
                 similarities.append((image, similarity))
@@ -220,22 +245,22 @@ class PhaseSelectionService:
         logger.info(f"Selected {len(selected_images)} images for Phase 3 based on {len(all_preferences)} preferences")
         return selected_images
     
-    @staticmethod
+    
     def _select_random_phase_images(
-        db: Session,
+        self,
         user_id: UUID,
         phase: int, 
         limit: int
     ) -> List[PoolImage]:
         
         voted_image_ids = (
-            db.query(UserChoice.pool_image_id).filter(UserChoice.user_id == user_id).all()
+            self.db.query(UserChoice.pool_image_id).filter(UserChoice.user_id == user_id).all()
             
         )
         
         voted_ids = [img_id[0] for img_id in voted_image_ids]
         
-        query = db.query(PoolImage).filter(
+        query = self.db.query(PoolImage).filter(
             PoolImage.is_active == True,
             PoolImage.phase_eligibility.any_(phase)
             
@@ -251,8 +276,8 @@ class PhaseSelectionService:
         
         return random.sample(available_images, limit)
     
-    @staticmethod
-    def _cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
+    
+    def _cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         
         """
         Calculate cosine similarity between two vectors

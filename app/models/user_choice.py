@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     UniqueConstraint,
 )
@@ -61,6 +62,8 @@ class UserChoice(Base):
             "position_in_phase >= 1 AND position_in_phase <= 20", name="check_position"
         ),
         CheckConstraint("response_time_ms > 0", name="check_response_time"),
+        Index("idx_user_phase", "user_id", "phase"),
+        Index("idx_pool_usage", "pool_image_id", "created_at")
     )
 
     def __repr__(self):

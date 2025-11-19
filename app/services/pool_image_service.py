@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 class PoolImageService:
     """Service for managing pool images"""
 
+    def __init__(self, db: Session):
+        self.db = db
+        
     @staticmethod
     def create_pool_image(
         db: Session,
@@ -78,8 +81,7 @@ class PoolImageService:
             logger.error(f"Error fetching pool image by URL: {e}")
             return None
 
-    @staticmethod
-    def get_images_by_phase(db: Session, phase: int) -> list[PoolImage]:
+    def get_images_by_phase(self, phase: int) -> list[PoolImage]:
         """
         Get all images for a specific phase
 
@@ -92,7 +94,7 @@ class PoolImageService:
         """
         try:
             images = (
-                db.query(PoolImage)
+                self.db.query(PoolImage)
                 .filter(
                     PoolImage.is_active == True,
                     PoolImage.phase_eligibility.any(phase) 
@@ -107,9 +109,8 @@ class PoolImageService:
             logger.error(f"Error fetching images for phase {phase}: {e}")
             return []
 
-    @staticmethod
     def update_usage_statistics(
-        db: Session,
+        self,
         image_id: UUID,
         action: str,
     ) -> bool:
@@ -125,7 +126,7 @@ class PoolImageService:
             True if successful
         """
         try:
-            pool_image = db.query(PoolImage).filter(PoolImage.id == image_id).first()
+            pool_image = self.db.query(PoolImage).filter(PoolImage.id == image_id).first()
 
             if not pool_image:
                 logger.warning(f"Pool image {image_id} not found")
@@ -140,10 +141,10 @@ class PoolImageService:
             elif action == "PREFER":
                 pool_image.prefer_count = (pool_image.prefer_count or 0) + 1
 
-            db.commit()
+            self.db.commit()
             return True
 
         except SQLAlchemyError as e:
             logger.error(f"Database error updating statistics: {e}")
-            db.rollback()
+            self.db.rollback()
             return False

@@ -18,8 +18,10 @@ logger = logging.getLogger(__name__)
 class RecommendationService:
     """Service for building user preferences and generating recommendations"""
 
-    @staticmethod
-    def build_user_preference_profile(db: Session, user_id: UUID) -> dict:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def build_user_preference_profile(self, user_id: UUID) -> dict:
         """
         Build user's preference profile from all 3 phases
 
@@ -32,7 +34,7 @@ class RecommendationService:
         """
         try:
             # Validate user completed all phases
-            user = db.query(User).filter(User.id == user_id).first()
+            user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
                 raise AppException(
                     error_code="error.user.not-found",
@@ -49,7 +51,7 @@ class RecommendationService:
 
             # Get all choices
             all_choices = (
-                db.query(UserChoice)
+                self.db.query(UserChoice)
                 .filter(UserChoice.user_id == user_id)
                 .all()
             )
@@ -152,9 +154,8 @@ class RecommendationService:
             logger.error(f"Error building preference profile: {e}", exc_info=True)
             raise
 
-    @staticmethod
     def generate_recommendations(
-        db: Session,
+        self,
         user_id: UUID,
         limit: int = 50,
         min_similarity: float = 0.5
@@ -172,11 +173,11 @@ class RecommendationService:
             List of (User, similarity_score) tuples, sorted by score DESC
         """
         try:
-            profile = RecommendationService.build_user_preference_profile(db, user_id)
+            profile = self.build_user_preference_profile(user_id)
             preference_vector = np.array(profile["preference_vector"])
 
             # Get current user's gender to filter opposite/compatible gender
-            current_user = db.query(User).filter(User.id == user_id).first()
+            current_user = self.db.query(User).filter(User.id == user_id).first()
             if not current_user:
                 raise AppException(
                     error_code="error.user.not-found",
@@ -186,7 +187,7 @@ class RecommendationService:
 
             # Get all other ACTIVE users with images
             candidate_users = (
-                db.query(User)
+                self.db.query(User)
                 .filter(
                     User.id != user_id,
                     # User.status == UserStatus.ACTIVE,
@@ -202,7 +203,7 @@ class RecommendationService:
 
             for candidate in candidate_users:
                 primary_image = (
-                    db.query(UserImage)
+                    self.db.query(UserImage)
                     .filter(
                         UserImage.user_id == candidate.id,
                         UserImage.is_primary == True,
@@ -254,9 +255,8 @@ class RecommendationService:
             logger.error(f"Error generating recommendations: {e}", exc_info=True)
             raise
 
-    @staticmethod
     def save_recommendations(
-        db: Session,
+        self,
         user_id: UUID,
         recommendations: List[Tuple[User, float]]
     ) -> List[Recommendation]:
@@ -272,7 +272,7 @@ class RecommendationService:
             List of created Recommendation objects
         """
         try:
-            db.query(Recommendation).filter(
+            self.db.query(Recommendation).filter(
                 Recommendation.user_id == user_id
             ).delete()
 
@@ -286,10 +286,10 @@ class RecommendationService:
                     rank=rank,
                 )
 
-                db.add(recommendation)
+                self.db.add(recommendation)
                 saved_recommendations.append(recommendation)
 
-            db.commit()
+            self.db.commit()
 
             logger.info(
                 f"Saved {len(saved_recommendations)} recommendations for user {user_id}",
@@ -299,13 +299,12 @@ class RecommendationService:
             return saved_recommendations
 
         except Exception as e:
-            db.rollback()
+            self.db.rollback()
             logger.error(f"Error saving recommendations: {e}", exc_info=True)
             raise
 
-    @staticmethod
     async def get_user_recommendations(
-        db: Session,
+        self,
         user_id: UUID,
         token: str,
         limit: int = 20
@@ -323,7 +322,7 @@ class RecommendationService:
         """
         try:
             recommendations = (
-                db.query(Recommendation)
+                self.db.query(Recommendation)
                 .filter(Recommendation.user_id == user_id)
                 .order_by(Recommendation.rank)
                 .limit(limit)
@@ -361,14 +360,13 @@ class RecommendationService:
             logger.error(f"Error getting recommendations: {e}", exc_info=True)
             raise
         
-    @staticmethod
-    def remove_all_recommendation(db: Session, user_id: UUID):
-        recommendation = db.query(Recommendation).filter(Recommendation.user_id == user_id).all()
+    def remove_all_recommendation(self, user_id: UUID):
+        recommendation = self.db.query(Recommendation).filter(Recommendation.user_id == user_id).all()
         if len(recommendation) ==0 :
             logger.info(f"Not found recommendation for user {user_id}")
 
-        db.query(Recommendation).filter(Recommendation.user_id == user_id).delete()
-        db.flush()
+        self.db.query(Recommendation).filter(Recommendation.user_id == user_id).delete()
+        self.db.flush()
         logger.info(f"[DONE] Reset all recommendation for user {user_id}")
     
         

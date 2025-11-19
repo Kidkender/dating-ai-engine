@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 recommendation_router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
-
+def __get_recommendation_service(db: Session = Depends(get_db)) -> RecommendationService:
+    return RecommendationService(db)
 
 @recommendation_router.get(
     "/profile",
@@ -26,7 +27,7 @@ recommendation_router = APIRouter(prefix="/recommendations", tags=["recommendati
     summary="Get user's preference profile",
 )
 def get_preference_profile(
-    db: Session = Depends(get_db),
+    service: RecommendationService = Depends(__get_recommendation_service),
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -42,8 +43,8 @@ def get_preference_profile(
     - Preference strength score
     """
     try:
-        profile = RecommendationService.build_user_preference_profile(
-            db=db, user_id=auth.user.id
+        profile = service.build_user_preference_profile(
+            user_id=auth.user.id
         )
 
         return PreferenceProfileResponse(**profile)
@@ -66,7 +67,8 @@ def get_preference_profile(
 )
 def generate_recommendations(
     # request: GenerateRecommendationsRequest,
-    db: Session = Depends(get_db),
+        service: RecommendationService = Depends(__get_recommendation_service),
+
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -93,8 +95,7 @@ def generate_recommendations(
     """
     try:
         # Generate recommendations
-        recommendations = RecommendationService.generate_recommendations(
-            db=db,
+        recommendations = service.generate_recommendations(
             user_id=auth.user.id,
             # limit=request.limit,
             # min_similarity=request.min_similarity,
@@ -108,21 +109,20 @@ def generate_recommendations(
                 total_generated=0,
                 saved_count=0,
                 top_similarity_score=0.0,
-                preference_profile=RecommendationService.build_user_preference_profile(
-                    db, auth.user.id
+                preference_profile=service.build_user_preference_profile(
+                    auth.user.id
                 ),
             )
 
         # Save to database
-        saved = RecommendationService.save_recommendations(
-            db=db,
+        saved = service.save_recommendations(
             user_id=auth.user.id,
             recommendations=recommendations,
         )
 
         # Get profile
-        profile = RecommendationService.build_user_preference_profile(
-            db, auth.user.id
+        profile = service.build_user_preference_profile(
+             auth.user.id
         )
 
         top_score = recommendations[0][1] if recommendations else 0.0
@@ -153,7 +153,7 @@ def generate_recommendations(
 )
 async def get_my_recommendations(
     limit: int = 20,
-    db: Session = Depends(get_db),
+    service: RecommendationService = Depends(__get_recommendation_service),
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -170,8 +170,7 @@ async def get_my_recommendations(
     try:
         print(f"user_id: {auth.user.id}")
 
-        recommendations = await RecommendationService.get_user_recommendations(
-            db=db,
+        recommendations = await service.get_user_recommendations(
             user_id=auth.user.id,
             token=auth.token,
             limit=limit,

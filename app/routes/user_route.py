@@ -7,9 +7,13 @@ from app.services.user_service import UserService
 
 user_router = APIRouter(prefix="/users", tags=["users"])
 
+def __get_user_service(db: Session = Depends(get_db)) -> UserService:
+    return UserService(db)
 
 @user_router.post(
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
-def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    return UserService.create_user(db, user_data)
+def register_user(user_data: UserCreate, 
+                  service: UserService = Depends(__get_user_service)
+                  ):
+    return service.create_user( user_data)

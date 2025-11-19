@@ -4,8 +4,9 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from app.services.user_service import UserService as user_service
-from app.services.recommendation_service import RecommendationService as recommendation_service
+from app.services.user_service import UserService
+from app.services.recommendation_service import RecommendationService 
+
 from ..core.database import transactional
 from app.models.user_choice import UserChoice, ChoiceType
 from app.models.user import User, UserStatus
@@ -19,9 +20,19 @@ logger = logging.getLogger(__name__)
 class UserChoiceService:
     """Service for managing user choices"""
 
-    @staticmethod
-    def create_choice(
+    def __init__(
+        self, 
         db: Session,
+    ) -> None:
+        self.db = db
+        self.user_service = UserService(db)
+        self.recommendation_service = RecommendationService(db)
+        self.pool_service = PoolImageService(db)
+
+
+
+    def create_choice(
+        self,
         user_id: UUID,
         pool_image_id: UUID,
         action: str,
@@ -45,7 +56,7 @@ class UserChoiceService:
         """
         try:
             # Validate user
-            user = db.query(User).filter(User.id == user_id).first()
+            user = self.user_service.get_user_by_id(user_id=user_id)
             if not user:
                 raise AppException(
                     error_code="error.user.not-found",
@@ -61,8 +72,8 @@ class UserChoiceService:
                 )
 
             # Get current phase and position
-            current_phase, position = UserChoiceService._get_current_phase_and_position(
-                db, user_id
+            current_phase, position = self._get_current_phase_and_position(
+                 user_id
             )
 
             # Check if completed
@@ -74,7 +85,7 @@ class UserChoiceService:
                 )
 
             # Validate pool image
-            pool_image = db.query(PoolImage).filter(PoolImage.id == pool_image_id).first()
+            pool_image = self.db.query(PoolImage).filter(PoolImage.id == pool_image_id).first()
             if not pool_image:
                 raise AppException(
                     error_code="error.image.not-found",
@@ -117,22 +128,22 @@ class UserChoiceService:
                 response_time_ms=response_time_ms,
             )
 
-            db.add(user_choice)
-            db.flush()
+            self.db.add(user_choice)
+            self.db.flush()
 
             # Update pool image statistics
-            PoolImageService.update_usage_statistics(db, pool_image_id, action.upper())
+            self.pool_service.update_usage_statistics(pool_image_id, action.upper())
 
             # Update user status if completed
-            new_phase, new_position = UserChoiceService._get_current_phase_and_position(
-                db, user_id
+            new_phase, new_position = self._get_current_phase_and_position(
+                user_id
             )
 
             if new_phase == "COMPLETED":
                 user.status = UserStatus.COMPLETED
-                db.flush()
+                self.db.flush()
 
-            db.commit()
+            self.db.commit()
 
             logger.info(
                 f"Choice created for user {user_id}",
@@ -150,12 +161,12 @@ class UserChoiceService:
                 "choice_id": str(user_choice.id),
                 "current_phase": new_phase if new_phase != "COMPLETED" else current_phase,
                 "phase_progress": f"{new_position - 1 if new_phase != 'COMPLETED' else 20}/20",
-                "total_choices": UserChoiceService._count_user_choices(db, user_id),
+                "total_choices": self._count_user_choices( user_id),
                 "all_completed": new_phase == "COMPLETED",
             }
 
         except IntegrityError as e:
-            db.rollback()
+            self.db.rollback()
             if "unique_user_pool_image" in str(e):
                 raise AppException(
                     error_code="error.choice.already-exists",
@@ -165,17 +176,16 @@ class UserChoiceService:
             raise
 
         except AppException:
-            db.rollback()
+            self.db.rollback()
             raise
 
         except Exception as e:
-            db.rollback()
+            self.db.rollback()
             logger.error(f"Error creating choice: {e}", exc_info=True)
             raise
 
-    @staticmethod
     def create_batch_choices(
-        db: Session,
+        self,
         user_id: UUID,
         choices_data: list[dict],
     ) -> dict:
@@ -204,7 +214,7 @@ class UserChoiceService:
                     status_code=400,
                 )
               
-            user = db.query(User).filter(User.id == user_id).first()
+            user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
                 raise AppException(
                     error_code="error.user.not-found",
@@ -220,8 +230,8 @@ class UserChoiceService:
             #     )
 
             # Get current phase
-            current_phase, start_position = UserChoiceService._get_current_phase_and_position(
-                db, user_id
+            current_phase, start_position = self._get_current_phase_and_position(
+                 user_id
             )
 
             if current_phase == "COMPLETED":
@@ -231,7 +241,7 @@ class UserChoiceService:
                     status_code=400,
                 )
 
-            current_phase_count = db.query(UserChoice).filter(
+            current_phase_count = self.db.query(UserChoice).filter(
                 UserChoice.user_id == user_id,
                 UserChoice.phase == current_phase
             ).count()
@@ -242,11 +252,11 @@ class UserChoiceService:
                     extra={"user_id": str(user_id), "phase": current_phase}
                 )
                 
-                db.query(UserChoice).filter(
+                self.db.query(UserChoice).filter(
                     UserChoice.user_id == user_id,
                     UserChoice.phase == current_phase
                 ).delete()
-                db.flush()
+                self.db.flush()
                 
                 start_position = 1
                 
@@ -258,7 +268,7 @@ class UserChoiceService:
                     message="Cannot vote for the same image multiple times in one submission",
                     status_code=400,
                 )
-            pool_images = db.query(PoolImage).filter(
+            pool_images = self.db.query(PoolImage).filter(
                         PoolImage.id.in_(pool_image_ids),
                         PoolImage.is_active == True
                     ).all()
@@ -288,7 +298,7 @@ class UserChoiceService:
                     details={"invalid_images": invalid_images}
                 )
             # Check if user already voted for any of these images (in previous phases)
-            existing_votes = db.query(UserChoice.pool_image_id).filter(
+            existing_votes = self.db.query(UserChoice.pool_image_id).filter(
                 UserChoice.user_id == user_id,
                 UserChoice.pool_image_id.in_(pool_image_ids)
             ).all()
@@ -330,27 +340,27 @@ class UserChoiceService:
                     response_time_ms=response_time_ms,
                 )
 
-                db.add(user_choice)
+                self.db.add(user_choice)
                 created_choices.append(user_choice)
 
                 # Update pool image statistics
-                PoolImageService.update_usage_statistics(
-                    db, pool_image_id, action.upper()
+                self.pool_service.update_usage_statistics(
+                    pool_image_id, action.upper()
                 )
 
-            db.flush()
+            self.db.flush()
 
             # Check if phase/all completed after batch
-            new_phase, new_position = UserChoiceService._get_current_phase_and_position(
-                db, user_id
+            new_phase, new_position = self._get_current_phase_and_position(
+                 user_id
             )
 
             # If completed all 3 phases, update user status
             if new_phase == "COMPLETED":
                 user.status = UserStatus.COMPLETED
-                db.flush()
+                self.db.flush()
 
-            db.commit()
+            self.db.commit()
 
             logger.info(
                 f"Successfully created 20 choices for user {user_id} phase {current_phase}",
@@ -361,7 +371,7 @@ class UserChoiceService:
                 },
             )
 
-            total_choices = UserChoiceService._count_user_choices(db, user_id)
+            total_choices = self._count_user_choices( user_id)
 
             # Calculate statistics
             actions = [choice.action for choice in created_choices]
@@ -385,41 +395,24 @@ class UserChoiceService:
             }
 
         except AppException:
-            db.rollback()
+            self.db.rollback()
             raise
 
         except Exception as e:
-            db.rollback()
+            self.db.rollback()
             logger.error(f"Error creating batch choices: {e}", exc_info=True)
             raise
 
-    @staticmethod
-    def get_user_progress(db: Session, user_id: UUID) -> dict:
-        """
-        Get user's current progress across all phases
-
-        Args:
-            db: Database session
-            user_id: User UUID
-
-        Returns:
-            Dictionary with progress information
-        """
+    def get_user_progress(self,  user_id: UUID):
+       
         try:
             # Validate user exists
-            user = db.query(User).filter(User.id == user_id).first()
-            if not user:
-                raise AppException(
-                    error_code="error.user.not-found",
-                    message="User not found",
-                    status_code=404,
-                )
-
-            # Count choices per phase
+            user = self.user_service.get_user_by_id(user_id)
+           
             phase_counts = {}
             for phase in [1, 2, 3]:
                 count = (
-                    db.query(UserChoice)
+                    self.db.query(UserChoice)
                     .filter(UserChoice.user_id == user_id, UserChoice.phase == phase)
                     .count()
                 )
@@ -428,8 +421,8 @@ class UserChoiceService:
             total_choices = sum(phase_counts.values())
 
             # Determine current phase and position
-            current_phase, position = UserChoiceService._get_current_phase_and_position(
-                db, user_id
+            current_phase, position = self._get_current_phase_and_position(
+                user_id
             )
 
             # Calculate completion status
@@ -465,8 +458,7 @@ class UserChoiceService:
             logger.error(f"Error getting user progress: {e}", exc_info=True)
             raise
 
-    @staticmethod
-    def _get_current_phase_and_position(db: Session, user_id: UUID) -> Tuple[int | str, int]:
+    def _get_current_phase_and_position(self, user_id: UUID) -> Tuple[int | str, int]:
         """
         Calculate current phase and position for user
 
@@ -479,7 +471,7 @@ class UserChoiceService:
             phase can be 1, 2, 3, or "COMPLETED"
             position is 1-20
         """
-        total_choices = UserChoiceService._count_user_choices(db, user_id)
+        total_choices = self._count_user_choices( user_id)
 
         if total_choices < 20:
             return 1, total_choices + 1
@@ -490,14 +482,12 @@ class UserChoiceService:
         else:
             return "COMPLETED", 60
 
-    @staticmethod
-    def _count_user_choices(db: Session, user_id: UUID) -> int:
+    def _count_user_choices(self, user_id: UUID) -> int:
         """Count total choices for a user"""
-        return db.query(UserChoice).filter(UserChoice.user_id == user_id).count()
+        return self.db.query(UserChoice).filter(UserChoice.user_id == user_id).count()
 
-    @staticmethod
     def get_user_choices(
-        db: Session, user_id: UUID, phase: Optional[int] = None
+        self, user_id: UUID, phase: Optional[int] = None
     ) -> dict:
         """
         Get user's choices with optional phase filter
@@ -512,16 +502,10 @@ class UserChoiceService:
         """
         try:
             # Validate user
-            user = db.query(User).filter(User.id == user_id).first()
-            if not user:
-                raise AppException(
-                    error_code="error.user.not-found",
-                    message="User not found",
-                    status_code=404,
-                )
+            self.user_service.get_user_by_id(user_id)
 
             # Query choices
-            query = db.query(UserChoice).filter(UserChoice.user_id == user_id)
+            query = self.db.query(UserChoice).filter(UserChoice.user_id == user_id)
 
             if phase:
                 if phase not in [1, 2, 3]:
@@ -571,13 +555,12 @@ class UserChoiceService:
             logger.error(f"Error getting user choices: {e}", exc_info=True)
             raise
         
-    @staticmethod
-    def reset_choice( db: Session, user_id: UUID) -> bool: 
-        with transactional(db):
-            user_service.get_user_by_id(db,user_id)
+    def reset_choice(self, user_id: UUID) -> bool: 
+        with transactional(self.db):
+            self.user_service.get_user_by_id( user_id)
 
-            db.query(UserChoice).filter(UserChoice.user_id ==  user_id).delete()
-            recommendation_service.remove_all_recommendation(db, user_id)
+            self.db.query(UserChoice).filter(UserChoice.user_id ==  user_id).delete()
+            self.recommendation_service.remove_all_recommendation(self.db, user_id)
                     
             logger.info(f"[DONE] User {user_id} delete choice")
         return True
