@@ -263,7 +263,7 @@ class PhaseSelectionService:
         
         query = self.db.query(PoolImage).filter(
             PoolImage.is_active == True,
-            PoolImage.phase_eligibility.any_(phase)
+            PoolImage.phase_eligibility.any(phase)
             
         )
         
