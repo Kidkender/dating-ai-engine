@@ -1,4 +1,3 @@
-import enum
 import uuid
 from sqlalchemy import (
     UUID,
@@ -16,12 +15,10 @@ from pgvector.sqlalchemy import Vector  # type: ignore
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
+from ..enumerations.user_enum import ImageStatus
 
-class ImageStatus(enum.Enum):
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
+
+
 
 
 class UserImage(Base):

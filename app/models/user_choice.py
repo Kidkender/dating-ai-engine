@@ -16,14 +16,8 @@ from app.core.database import Base
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
-import enum
 
-
-class ChoiceType(enum.Enum):
-    LIKE = "like"
-    PASS = "pass"
-    PREFER = "prefer"
-
+from ..enumerations.choice_enum import ChoiceType
 
 class UserChoice(Base):
     __tablename__ = "user_choices"

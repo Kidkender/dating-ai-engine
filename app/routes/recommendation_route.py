@@ -1,24 +1,20 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+
+from ..core.dependency import RecommendationServiceDep
 
 from ..constants.error_constant import ERROR_REC_FETCH_FAILED, ERROR_REC_GENERATE_FAILED, ERROR_REC_PREFERENCE_PROFILE_FAILED
 
 from ..core.auth_dependency import AuthResult, get_current_user
-from app.core.database import get_db
 from app.core.exception import AppException
 from app.schemas.recommendation import (
     PreferenceProfileResponse,
     GenerateRecommendationsResponse,
 )
-from app.services.recommendation_service import RecommendationService
 
 logger = logging.getLogger(__name__)
 
 recommendation_router = APIRouter(prefix="/recommendations", tags=["recommendations"])
-
-def __get_recommendation_service(db: Session = Depends(get_db)) -> RecommendationService:
-    return RecommendationService(db)
 
 @recommendation_router.get(
     "/profile",
@@ -27,7 +23,7 @@ def __get_recommendation_service(db: Session = Depends(get_db)) -> Recommendatio
     summary="Get user's preference profile",
 )
 def get_preference_profile(
-    service: RecommendationService = Depends(__get_recommendation_service),
+    service: RecommendationServiceDep,
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -67,7 +63,7 @@ def get_preference_profile(
 )
 def generate_recommendations(
     # request: GenerateRecommendationsRequest,
-        service: RecommendationService = Depends(__get_recommendation_service),
+        service: RecommendationServiceDep,
 
     auth: AuthResult = Depends(get_current_user),
 ):
@@ -152,8 +148,8 @@ def generate_recommendations(
     summary="Get my saved recommendations",
 )
 async def get_my_recommendations(
+    service: RecommendationServiceDep,
     limit: int = 20,
-    service: RecommendationService = Depends(__get_recommendation_service),
     auth: AuthResult = Depends(get_current_user),
 ):
     """

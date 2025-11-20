@@ -1,3 +1,4 @@
+from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -5,6 +6,10 @@ from app.core.config import settings
 from app.services.dating_app_client import DatingAppClient
 from app.services.face_processing_service import FaceProcessingService
 from app.services.image_sync_service import ImageSyncService
+from ..services.pool_image_service import PoolImageService
+from ..services.user_choice_service import UserChoiceService
+from ..services.recommendation_service import RecommendationService
+from ..services.user_service import UserService
 from app.services.user_sync_service import UserSyncService
 from app.services.orchestrators.sync_orchestrator import SyncOrchestrator
 
@@ -69,3 +74,28 @@ def get_sync_orchestrator(
         dating_app_client=dating_app_client,
         user_sync_service=user_sync_service,
     )
+
+def get_user_service(
+    db: Annotated[Session, Depends(get_db)]
+) -> UserService: 
+    return UserService(db)
+
+def get_recommendation_service(
+    db: Annotated[Session, Depends(get_db)]
+) -> RecommendationService:
+    return RecommendationService(db)
+
+def get_user_choice_service(
+    db: Annotated[Session, Depends(get_db)]
+) -> UserChoiceService:
+    return UserChoiceService(db)    
+
+def get_pool_image_service(
+    db: Annotated[Session, Depends(get_db)]
+) -> PoolImageService:
+    return PoolImageService(db)
+
+UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+RecommendationServiceDep = Annotated[RecommendationService, Depends(get_recommendation_service)]
+UserChoiceServiceDep = Annotated[UserChoiceService, Depends(get_user_choice_service)]
+PoolImageServiceDep = Annotated[PoolImageService, Depends(get_pool_image_service)]

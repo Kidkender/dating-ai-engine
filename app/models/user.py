@@ -4,20 +4,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from sqlalchemy.dialects.postgresql import UUID
-import enum
 from app.core.database import Base
-
-
-class Gender(enum.Enum):
-    MALE = "MALE"
-    FEMALE = "FEMALE"
-
-
-class UserStatus(enum.Enum):
-    ONBOARDING = "ONBOARDING"
-    ACTIVE = "ACTIVE"
-    COMPLETED = "COMPLETED"
-
+from ..enumerations.user_enum import Gender, UserStatus
 
 class User(Base):
     __tablename__ = "users"

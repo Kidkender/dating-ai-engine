@@ -1,12 +1,12 @@
 import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+
+from ..core.dependency import UserChoiceServiceDep
 
 from ..constants.error_constant import ERROR_CHOICE_SUBMIT_FAILED
 
 from ..core.auth_dependency import AuthResult, get_current_user
-from app.core.database import get_db
 from app.core.exception import AppException
 from app.schemas.user_choice import (
     BatchChoiceSubmitRequest,
@@ -16,15 +16,10 @@ from app.schemas.user_choice import (
     UserProgressResponse,
     UserChoicesListResponse,
 )
-from app.services.user_choice_service import UserChoiceService
 
 logger = logging.getLogger(__name__)
 
 choice_router = APIRouter(prefix="/choices", tags=["choices"])
-
-
-def __get_user_choice_service(db: Session = Depends(get_db)) -> UserChoiceService:
-    return UserChoiceService(db)
 
 @choice_router.post(
     "",
@@ -34,7 +29,7 @@ def __get_user_choice_service(db: Session = Depends(get_db)) -> UserChoiceServic
 )
 def submit_choice(
     request: ChoiceSubmitRequest,
-    service: UserChoiceService = Depends(__get_user_choice_service),
+    service: UserChoiceServiceDep,
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -84,7 +79,7 @@ def submit_choice(
 )
 def submit_batch_choices(
     request: BatchChoiceSubmitRequest,
-    service: UserChoiceService = Depends(__get_user_choice_service),
+    service: UserChoiceServiceDep,
     auth: AuthResult = Depends(get_current_user),
 ):
 
@@ -142,7 +137,7 @@ def submit_batch_choices(
     summary="Get user's current progress",
 )
 def get_progress(
-    service: UserChoiceService = Depends(__get_user_choice_service),
+    service: UserChoiceServiceDep,
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -165,8 +160,8 @@ def get_progress(
     summary="Get user's choices",
 )
 def get_my_choices(
+    service: UserChoiceServiceDep,
     phase: Optional[int] = None,
-    service: UserChoiceService = Depends(__get_user_choice_service),
     auth: AuthResult = Depends(get_current_user),
 ):
     """
@@ -193,7 +188,7 @@ def get_my_choices(
     summary="Reset choices",
 )        
 def reset_user_choice(
-    service: UserChoiceService = Depends(__get_user_choice_service),
+    service: UserChoiceServiceDep,
     auth: AuthResult = Depends(get_current_user)
 ):
     return service.reset_choice(user_id=auth.user.id)

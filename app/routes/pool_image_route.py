@@ -2,6 +2,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from ..core.dependency import PoolImageServiceDep
+
 from ..core.config import settings
 
 from ..services.face_processing_service import FaceProcessingService
@@ -15,16 +17,11 @@ from app.core.database import get_db
 from app.schemas.pool_image import ImportSummary, PhaseImagesResponse, PoolImageResponse
 from ..services.phase_selection_service import PhaseSelectionService
 from ..services.import_service import ImportService
-from app.services.pool_image_service import PoolImageService
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 pool_image_router = APIRouter(prefix="/pool-images", tags=["pool-images"])
-
-
-def __get_pool_service(db: Session = Depends(get_db)) -> PoolImageService:
-    return PoolImageService(db)
 
 @pool_image_router.post(
     "/import",
@@ -93,7 +90,8 @@ def import_pool_images(
 )
 def get_phase_images(
     phase: int,
-    service: PoolImageService = Depends(__get_pool_service)):
+    service: PoolImageServiceDep,
+    ):
 
     if phase not in [1, 2, 3]:
         raise HTTPException(

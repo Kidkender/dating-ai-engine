@@ -11,6 +11,17 @@ from .config import settings
 engine = create_engine(
     cast(str, settings.DATABASE_URL),
     pool_pre_ping=True,
+    pool_size=20,
+    max_overflow=10,
+    pool_timeout=30,
+    pool_recycle=3600,
+    echo=False,
+    connect_args= {
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+    }
 )
 
 SessionLocal = sessionmaker(

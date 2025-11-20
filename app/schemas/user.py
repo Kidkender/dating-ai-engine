@@ -2,18 +2,8 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
-from enum import Enum
 
-
-class Gender(str, Enum):
-    MALE = "MALE"
-    FEMALE = "FEMALE"
-
-
-class UserStatus(str, Enum):
-    ONBOARDING = "ONBOARDING"
-    ACTIVE = "ACTIVE"
-    COMPLETED = "COMPLETED"
+from ..enumerations.user_enum import Gender, UserStatus
 
 
 class UserBase(BaseModel):
@@ -56,7 +46,7 @@ class UserResponse(UserBase):
     """Response schema for user"""
 
     id: UUID
-    session_token: str
+    # session_token: Optional[str] = None
     status: UserStatus
     created_at: datetime
     last_active: Optional[datetime] = None
