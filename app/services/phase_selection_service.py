@@ -29,7 +29,8 @@ class PhaseSelectionService:
         
         progress = self.choice_service.get_user_progress(user_id)
         phase = progress["current_phase"]
-        if progress["all_completed"]:
+ 
+        if progress["all_completed"] is True:
             raise AppException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 error_code=ERROR_REC_USER_COMPLETED_ALL_PHASES

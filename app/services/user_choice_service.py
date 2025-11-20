@@ -412,9 +412,9 @@ class UserChoiceService:
            
             phase_counts = {}
             for phase in [1, 2, 3]:
-                count = (
+                count = len(
                     self.get_choice_by_phase(user_id, phase= phase)
-                ).count()
+                )
                 phase_counts[phase] = count
 
             total_choices = sum(phase_counts.values())

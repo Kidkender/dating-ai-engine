@@ -54,7 +54,7 @@ async def get_current_user(
     
     is_valid, user_id,email, error_message = await AuthService.validate_token(access_token)
     
-    
+    print("user id:", user_id)
     if not is_valid:
         logger.warning(
             f"Token validation failed: {error_message}",
