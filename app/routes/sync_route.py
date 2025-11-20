@@ -1,9 +1,8 @@
 from datetime import datetime
 import logging
 from fastapi import APIRouter, Body, Depends, status
-from dependency_injector.wiring import inject, Provide
+from dependency_injector.wiring import inject
 
-from app.core.container import Container
 from ..core.dependency import get_sync_orchestrator
 from app.schemas.sync import SyncRequest, SyncResponse, SyncSummary
 from app.services.orchestrators.sync_orchestrator import SyncOrchestrator
@@ -77,39 +76,3 @@ async def sync_users(
 
         return SyncResponse(message=f"Sync failed: {str(e)}", summary=error_summary)
 
-
-@sync_router.get(
-    "/status",
-    status_code=status.HTTP_200_OK,
-    summary="Check sync service status",
-)
-@inject
-async def check_sync_status(
-    sync_orchestrator: SyncOrchestrator = Depends(Provide[Container.sync_orchestrator]),
-):
-    """Check sync service status"""
-    try:
-        dating_app_connected = (
-            await sync_orchestrator.dating_app_client.verify_connection()
-        )
-        face_processor_ready = (
-            sync_orchestrator.user_sync_service.image_sync_service.face_processor.device
-            is not None
-        )
-
-        return {
-            "status": (
-                "healthy"
-                if (dating_app_connected and face_processor_ready)
-                else "degraded"
-            ),
-            "dating_app_connected": dating_app_connected,
-            "face_processor_ready": face_processor_ready,
-            "face_processor_device": str(
-                sync_orchestrator.user_sync_service.image_sync_service.face_processor.device
-            ),
-        }
-
-    except Exception as e:
-        logger.error("Error checking sync status", exc_info=True)
-        return {"status": "error", "error": str(e)}

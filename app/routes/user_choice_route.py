@@ -89,8 +89,7 @@ def submit_batch_choices(
 ):
 
     try:
-        # Convert choices to dict format
-        print(f"data: {request}")
+      
         choices_data = [
             {
                 "pool_image_id": choice.pool_image_id,

@@ -203,12 +203,12 @@ class PhaseSelectionService:
 
         if not preferred_embeddings:
             logger.warning(f"No valid embedding found, using random selection")
-            return self._select_random_phase_images(db, user_id, 3, limit)
+            return self._select_random_phase_images( user_id, 3, limit)
 
         preferred_vector = np.mean(preferred_embeddings, axis=0)
 
         voted_image_ids = (
-                db.query(UserChoice.pool_image_id).filter(
+                self.db.query(UserChoice.pool_image_id).filter(
                     UserChoice.user_id == user_id
                     ).all())
 

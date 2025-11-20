@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -9,7 +9,7 @@ from app.services.recommendation_service import RecommendationService
 
 from ..core.database import transactional
 from app.models.user_choice import UserChoice, ChoiceType
-from app.models.user import User, UserStatus
+from app.models.user import UserStatus
 from app.models.pool_image import PoolImage
 from app.services.pool_image_service import PoolImageService
 from app.core.exception import AppException
@@ -183,6 +183,16 @@ class UserChoiceService:
             self.db.rollback()
             logger.error(f"Error creating choice: {e}", exc_info=True)
             raise
+        
+    def get_choice_by_phase(
+        self,
+        user_id: UUID,
+        phase: int) -> List[UserChoice]:
+        return self.db.query(UserChoice).filter(
+            UserChoice.user_id == user_id,
+            UserChoice.phase == phase
+        ).all()
+        
 
     def create_batch_choices(
         self,
@@ -214,14 +224,8 @@ class UserChoiceService:
                     status_code=400,
                 )
               
-            user = self.db.query(User).filter(User.id == user_id).first()
-            if not user:
-                raise AppException(
-                    error_code="error.user.not-found",
-                    message="User not found",
-                    status_code=404,
-                )
-
+            user = self.user_service.get_user_by_id(user_id)
+       
             # if user.status != UserStatus.ACTIVE:
             #     raise AppException(
             #         error_code="error.user.not-active",
@@ -240,13 +244,10 @@ class UserChoiceService:
                     message="All phases completed",
                     status_code=400,
                 )
-
-            current_phase_count = self.db.query(UserChoice).filter(
-                UserChoice.user_id == user_id,
-                UserChoice.phase == current_phase
-            ).count()
             
-            if current_phase_count > 0:
+            current_phase_count = self.get_choice_by_phase(user_id, phase=int(current_phase))
+            
+            if len(current_phase_count) > 0:
                 logger.warning(
                     f"User {user_id} has {current_phase_count} choices in phase {current_phase}. Deleting to redo phase.",
                     extra={"user_id": str(user_id), "phase": current_phase}
@@ -272,7 +273,7 @@ class UserChoiceService:
                         PoolImage.id.in_(pool_image_ids),
                         PoolImage.is_active == True
                     ).all()
-
+            
             if len(pool_images) != 20:
                 raise AppException(
                     error_code="error.choice.invalid-images",
@@ -412,10 +413,8 @@ class UserChoiceService:
             phase_counts = {}
             for phase in [1, 2, 3]:
                 count = (
-                    self.db.query(UserChoice)
-                    .filter(UserChoice.user_id == user_id, UserChoice.phase == phase)
-                    .count()
-                )
+                    self.get_choice_by_phase(user_id, phase= phase)
+                ).count()
                 phase_counts[phase] = count
 
             total_choices = sum(phase_counts.values())
@@ -560,7 +559,7 @@ class UserChoiceService:
             self.user_service.get_user_by_id( user_id)
 
             self.db.query(UserChoice).filter(UserChoice.user_id ==  user_id).delete()
-            self.recommendation_service.remove_all_recommendation(self.db, user_id)
+            self.recommendation_service.remove_all_recommendation( user_id)
                     
             logger.info(f"[DONE] User {user_id} delete choice")
         return True
