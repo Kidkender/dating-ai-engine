@@ -18,10 +18,10 @@ class UserSyncService:
     def __init__(
         self,
         db: Session,
-        image_sync_service: ImageSyncService,
+        image_sync_service: ImageSyncService | None = None,
     ):
         self.db = db
-        self.image_sync_service = image_sync_service
+        self.image_sync_service = image_sync_service or ImageSyncService(db=db)
 
     async def sync_single_user(
         self,

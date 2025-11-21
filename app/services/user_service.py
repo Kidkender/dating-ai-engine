@@ -66,4 +66,8 @@ class UserService:
               status_code=status.HTTP_404_NOT_FOUND
           )
         return exist_user
+    
+    def get_user_by_external_id(self, external_user_id: str) -> User | None :
+        exist_user = self.db.query(User).filter(User.external_user_id == external_user_id).first()
+        return exist_user
         

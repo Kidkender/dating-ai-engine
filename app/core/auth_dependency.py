@@ -24,19 +24,7 @@ async def get_current_user(
     authorization: str = Header(...),
     db: Session = Depends(get_db)
 )-> AuthResult: 
-    """
-    Validate access token and return current user
 
-    Args:
-        authorization: Bearer token from Authorization header
-        db: Database session
-
-    Returns:
-        User object
-
-    Raises:
-        HTTPException: If token invalid or user not found
-    """
     
     if not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -50,9 +38,12 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Access token is required",
+    
         )
     
-    is_valid, user_id,email, error_message = await AuthService.validate_token(access_token)
+    auth_service = AuthService(db)
+
+    is_valid, user_id,email, error_message, data = await auth_service.validate_token( access_token)
     
     print("user id:", user_id)
     if not is_valid:
@@ -74,7 +65,7 @@ async def get_current_user(
         )
     
     try: 
-        user = AuthService.get_or_create_user(db=db, user_id=user_id, email=email)
+        user = await auth_service.get_or_create_user( user_id=user_id, email=email, data=data)
         return AuthResult(user, access_token)
 
     except Exception as e:

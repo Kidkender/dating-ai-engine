@@ -2,12 +2,15 @@ import logging
 from typing import Optional, Tuple
 import httpx
 from sqlalchemy.orm import Session
-
-from app.utils.http_client import http_client
+from app.schemas.sync import DatingAppUser, UserInfo
 
 from ..core.exception import AppException
 
-from ..models.user import User, UserStatus
+from .user_sync_service import UserSyncService
+from app.utils.http_client import http_client
+
+
+from ..models.user import User
 
 from app.core.config import settings
 
@@ -15,17 +18,11 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 class AuthService: 
     
-    @staticmethod
-    async def validate_token(access_token:  str) -> Tuple[bool, Optional[str],Optional[str], Optional[str]]:
-        """
-        Validate access token with main backend's healthCheck endpoint
-
-        Args:
-            access_token: Access token from Authorization header
-
-        Returns:
-            Tuple of (is_valid, user_id, error_message)
-        """
+    def __init__(self, db: Session):
+        self.db = db
+    
+    async def validate_token(self, access_token:  str) -> Tuple[bool, Optional[str],Optional[str], Optional[str], Optional[dict]]:
+      
         try:
             headers = {
                 "Authorization": f"Bearer {access_token}",
@@ -33,7 +30,7 @@ class AuthService:
             }
             
             response = await http_client.get(
-                f"{settings.DATING_APP_BASE_URL}/api/users/getCurrentUser",
+                f"{settings.DATING_APP_BASE_URL}/api/dating",
                 headers = headers
             )
             
@@ -48,71 +45,71 @@ class AuthService:
             user_id = data.get("data", {}).get("id")
             email = data.get("data", {}).get("userEmail")
             
-            
+            payload = data.get("data", {})
+
             if not user_id:
                 logger.error(
                     "Invalid response format from getCurrentUser",
-                    extra={"response": data}
+                    extra={"response": payload}
                 )
-                return False, None, None, 'Invalid response format'
-
+                return False, None, None, 'Invalid response format', None
+            
             logger.info(
                 f"Token validated successfully for user {user_id}",
                 extra={"user_id": user_id},
             )
 
-            return True, user_id, email, None
+            return True, user_id, email, None, payload
          
         except httpx.TimeoutException:
             logger.error("Token validation timeout")
-            return False, None, None,"Token validation timeout"
+            return False, None, None,"Token validation timeout", None
 
         except httpx.HTTPError as e:
             logger.error(f"HTTP error during token validation: {e}", exc_info=True)
-            return False, None, None, f"HTTP error: {str(e)}"
-
+            return False, None, None, f"HTTP error: {str(e)}", None
         except Exception as e:
             logger.error(f"Error validating token: {e}", exc_info=True)
-            return False, None, None,f"Validation error: {str(e)}"
+            return False, None, None,f"Validation error: {str(e)}", None
         
-    @staticmethod
-    def get_or_create_user(db: Session, user_id: str, email: Optional[str] = None) -> User: 
+    async def get_or_create_user(self, user_id: str, email: Optional[str] = None, data: Optional[dict] = None) -> User: 
         
         
         try: 
-            user = (db.query(User).filter(User.external_user_id == user_id).first())
+            user = (self.db.query(User).filter(User.external_user_id == user_id).first())
             
             if user:
                 return user
-
-            if email:
-                user = db.query(User).filter(User.email == email).first()
-                
-            if email:
-                user = db.query(User).filter(User.email == email).first()
-                
-                if user:
-                    user.external_user_id = user_id
-                    db.commit()
-                    db.refresh(user)
-                    logger.info(
-                        f"Linked external_user_id {user_id} to existing user",
-                        extra={"user_id": str(user.id), "external_user_id": user_id}
-                    )
-                    return user
             
-            # Create new user
-            new_user = User(
-                external_user_id=user_id,
-                email=email or f"{user_id}@temp.com",
-                session_token="",
-                status=UserStatus.ONBOARDING
-            )
-                
-            db.add(new_user)
-            db.commit()
-            db.refresh(new_user)
+            userName = "user_"+ user_id
+            userEmail = "user_"+ user_id + "@example.com" if not email else email
+            userGender = data.get("orientation")
+            datingImages = data.get('datingImages')
+            
+            _id= data.get("id")
+   
+            dating_user = DatingAppUser(
+                user=UserInfo(
+                userName=userName,
+                userEmail=userEmail,
+                userGender=userGender
+                ),
+                datingImages=datingImages,
+                id= _id,
+                userId=user_id,
 
+            )
+            
+            user_sync_service = UserSyncService(self.db)
+            sync_result = await user_sync_service.sync_single_user(
+                dating_user=dating_user,
+                force_resync=False,
+                min_face_confidence=0.8,
+            )
+            
+            new_user = (self.db.query(User).filter(User.external_user_id == user_id).first())
+
+        
             logger.info(
                 f"Created new user for external_user_id {user_id}",
                 extra={"user_id": str(new_user.id), "external_user_id": user_id}
@@ -121,7 +118,7 @@ class AuthService:
             return new_user
             
         except Exception as e:
-                db.rollback()
+                self.db.rollback()
                 logger.error(f"Error getting/creating user: {e}", exc_info=True)
                 raise AppException(
                     error_code="error.user.creation-failed",

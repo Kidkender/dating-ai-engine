@@ -1,8 +1,3 @@
-"""
-Sync Orchestrator - Điều phối toàn bộ sync flow
-Responsibility: Coordinate sync process, không chứa business logic
-"""
-
 import logging
 import time
 from datetime import datetime

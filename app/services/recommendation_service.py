@@ -212,15 +212,12 @@ class RecommendationService:
                 )
                 
                 if not primary_image:
-                    # print(f"primary: {not primary_image}")
                     continue
 
                 if primary_image.face_embedding is None:
-                    # print(f"checkNone: {primary_image.face_embedding is not None}" )
                     continue
 
                 if len(primary_image.face_embedding) == 0:
-                    # print(f"len: {len(primary_image.face_embedding) >0}")
                     continue
 
            

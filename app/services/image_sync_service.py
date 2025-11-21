@@ -3,6 +3,7 @@ import time
 from uuid import UUID
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.schemas.sync import ImageProcessingResult
 from app.services.dating_app_client import DatingAppClient
 from app.services.face_processing_service import FaceProcessingService
@@ -17,12 +18,20 @@ class ImageSyncService:
     def __init__(
         self,
         db: Session,
-        dating_app_client: DatingAppClient,
-        face_processor: FaceProcessingService,
+        dating_app_client: DatingAppClient | None = None,
+        face_processor: FaceProcessingService | None = None,
     ):
         self.db = db
-        self.dating_app_client = dating_app_client
-        self.face_processor = face_processor
+        self.dating_app_client = dating_app_client or DatingAppClient(
+            base_url=settings.DATING_APP_BASE_URL or "",
+            image_base_url=settings.DATING_APP_IMAGE_BASE_URL or "",
+            api_key=settings.DATING_APP_API_KEY,
+            timeout=settings.DATING_APP_TIMEOUT,
+        )
+        self.face_processor = (
+            face_processor
+            or FaceProcessingService(min_confidence=settings.MIN_FACE_CONFIDENCE)
+        )
 
     async def process_user_image(
         self, user_id: UUID, image_path: str, min_face_confidence: float
@@ -39,7 +48,7 @@ class ImageSyncService:
             ImageProcessingResult with processing details
         """
         start_time = time.time()
-
+        
         # Extract filename from path
         filename = self._extract_filename(image_path)
 
